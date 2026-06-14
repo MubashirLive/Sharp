@@ -1,0 +1,29 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "loading": "Loading…",
+    "search": "Search",
+    "noResults": "No results found",
+    "error": "Something went wrong",
+    "retry": "Retry"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "pin": "PIN",
+    "forgotPin": "Forgot PIN?"
+  },
+  "nav": {
+    "home": "Home",
+    "school": "School",
+    "people": "People",
+    "students": "Students",
+    "calendar": "Calendar",
+    "attendance": "Attendance",
+    "messenger": "Messages",
+    "roleManager": "Role Manager"
+  }
+}

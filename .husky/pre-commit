@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Block .env files from being committed
+if git diff --cached --name-only | grep -E '^\.env$|^\.env\.'; then
+  echo "❌ .env files must not be committed"
+  exit 1
+fi

@@ -1,0 +1,29 @@
+{
+  "common": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "loading": "लोड हो रहा है…",
+    "search": "खोजें",
+    "noResults": "कोई परिणाम नहीं मिला",
+    "error": "कुछ गलत हो गया",
+    "retry": "पुनः प्रयास करें"
+  },
+  "auth": {
+    "login": "लॉगिन",
+    "logout": "लॉगआउट",
+    "pin": "पिन",
+    "forgotPin": "पिन भूल गए?"
+  },
+  "nav": {
+    "home": "होम",
+    "school": "स्कूल",
+    "people": "स्टाफ",
+    "students": "छात्र",
+    "calendar": "कैलेंडर",
+    "attendance": "उपस्थिति",
+    "messenger": "संदेश",
+    "roleManager": "भूमिका प्रबंधक"
+  }
+}
