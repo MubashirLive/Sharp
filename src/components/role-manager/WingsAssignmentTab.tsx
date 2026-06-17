@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Loader2, Plus, X, User, Users, Crown, Pencil, Save, RotateCcw, GraduationCap } from "lucide-react";
+import { Loader2, Plus, X, User, Users, Crown, Pencil, Save, RotateCcw, GraduationCap, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,12 +7,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   getWingsWithFullDetails,
-  addStaffToWing,
-  removeStaffFromWing,
-  addRemovedSentinel,
   getAvailableStaffForWing,
   type WingWithStats,
 } from "@/integrations/supabase/queries/wings";
+import { useSaveWingAssignments } from "@/hooks/useRoleManagerQueries";
 import { WingStaffBadge } from "./WingStaffBadge";
 import { CoordinatorReplacementDialog } from "./CoordinatorReplacementDialog";
 import { CoordinatorsViewAllModal } from "./CoordinatorsViewAllModal";
@@ -63,11 +61,12 @@ interface StaffChipProps {
   name: string;
   role?: "coordinator" | "teacher";
   isPrimary?: boolean;
+  isAutoAssigned?: boolean;
   onRemove?: () => void;
   canRemove?: boolean;
 }
 
-function StaffChip({ name, role, isPrimary, onRemove, canRemove }: StaffChipProps) {
+function StaffChip({ name, role, isPrimary, isAutoAssigned, onRemove, canRemove }: StaffChipProps) {
   return (
     <div
       className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
@@ -77,8 +76,23 @@ function StaffChip({ name, role, isPrimary, onRemove, canRemove }: StaffChipProp
       {role === "coordinator" && <Crown className="h-3 w-3 text-amber-600" />}
       <span className="truncate max-w-[100px]">{name}</span>
       {isPrimary && <span className="text-[10px] font-bold">✨</span>}
+      {isAutoAssigned && (
+        <Lock
+          className="h-3 w-3 text-muted-foreground flex-shrink-0"
+          title="Auto-assigned from class assignment"
+        />
+      )}
       {canRemove && onRemove && (
-        <button onClick={onRemove} className="hover:text-destructive ml-1">
+        <button
+          onClick={onRemove}
+          disabled={isAutoAssigned}
+          title={isAutoAssigned ? "Auto-assigned from class assignment — remove via Subjects tab" : undefined}
+          className={`ml-1 ${
+            isAutoAssigned
+              ? "opacity-40 cursor-not-allowed"
+              : "hover:text-destructive"
+          }`}
+        >
           <X className="h-3 w-3" />
         </button>
       )}
@@ -162,7 +176,6 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [wings, setWings] = useState<WingWithStats[]>([]);
-  const [originalWings, setOriginalWings] = useState<WingWithStats[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [drafts, setDrafts] = useState<Map<string, WingDraft>>(new Map());
   const [expandedWings, setExpandedWings] = useState<Set<string>>(new Set());
@@ -178,6 +191,8 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
   const [staffFilter, setStaffFilter] = useState("");
   const [staffPage, setStaffPage] = useState(1);
   const PAGE_SIZE = 25;
+
+  const saveMutation = useSaveWingAssignments(schoolId);
 
   // Load wings data
   const loadData = useCallback(async () => {
@@ -197,7 +212,6 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
       });
 
       setWings(sortedWings);
-      setOriginalWings(sortedWings);
 
       // Load available staff
       const staff = await getAvailableStaffForWing(schoolId);
@@ -317,8 +331,8 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
   };
 
   // Cancel edit mode
-  const cancelEdit = () => {
-    setWings(originalWings);
+  const cancelEdit = async () => {
+    await loadData();
     setDrafts(new Map());
     setIsEditing(false);
     setExpandedWings(new Set());
@@ -327,79 +341,39 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
 
   // Save all pending changes
   const handleSave = async () => {
-    // DIAGNOSTIC removed
     setSaving(true);
     try {
-      // Build list of all operations
-      const operations: Promise<{ success: boolean; error?: string }>[] = [];
-
-      // Use the ORIGINAL wings (before optimistic edits) to determine if
-      // a removed id is a real wing_staff row (manual) or an auto-assigned
-      // entry synthesised from staff_roles / subject_teachers. Auto-assigned
-      // staff have no wing_staff row to delete — for them we insert a
-      // "removed" sentinel via addRemovedSentinel so the auto-merge loop
-      // skips them on subsequent fetches.
-      const originalWingMap = new Map<string, WingWithStats>();
-      for (const w of originalWings) originalWingMap.set(w.id, w);
-
-      const isAutoAssigned = (wingId: string, staffId: string, role: "coordinator" | "teacher"): boolean => {
-        const w = originalWingMap.get(wingId);
-        if (!w) return false;
-        if (role === "coordinator") {
-          // Coordinators are never auto-assigned in current data — they
-          // always come from wing_staff directly. Return false to keep the
-          // existing removeStaffFromWing path.
-          return false;
-        }
-        const t = w.teachers.find((x) => x.staff_id === staffId);
-        return !!t?.auto_assigned;
-      };
+      const additions: Array<{ wingId: string; staffId: string; role: "coordinator" | "teacher" }> = [];
+      const removals: Array<{ wingId: string; staffId: string; role: "coordinator" | "teacher" }> = [];
 
       drafts.forEach((draft, wingId) => {
-        // Add coordinators
-        for (const add of draft.addedCoordinators) {
-          operations.push(addStaffToWing(wingId, add.staffId, "coordinator", schoolId));
+        for (const a of draft.addedCoordinators) {
+          additions.push({ wingId, staffId: a.staffId, role: "coordinator" });
         }
-        // Add teachers
-        for (const add of draft.addedTeachers) {
-          operations.push(addStaffToWing(wingId, add.staffId, "teacher", schoolId));
+        for (const a of draft.addedTeachers) {
+          additions.push({ wingId, staffId: a.staffId, role: "teacher" });
         }
-        // Remove coordinators
         for (const staffId of draft.removedCoordinatorIds) {
-          if (isAutoAssigned(wingId, staffId, "coordinator")) {
-            operations.push(addRemovedSentinel(wingId, staffId, "coordinator", schoolId));
-          } else {
-            operations.push(removeStaffFromWing(wingId, staffId, "coordinator"));
-          }
+          removals.push({ wingId, staffId, role: "coordinator" });
         }
-        // Remove teachers — branch: auto-assigned → sentinel insert;
-        // manual (real wing_staff row) → delete.
         for (const staffId of draft.removedTeacherIds) {
-          if (isAutoAssigned(wingId, staffId, "teacher")) {
-            operations.push(addRemovedSentinel(wingId, staffId, "teacher", schoolId));
-          } else {
-            operations.push(removeStaffFromWing(wingId, staffId, "teacher"));
-          }
+          removals.push({ wingId, staffId, role: "teacher" });
         }
       });
 
-      const results = await Promise.all(operations);
-
-      // Check for failures
-      const failures = results.filter((r) => !r.success);
-      if (failures.length > 0) {
-        toast.error(`Failed to save ${failures.length} change(s)`);
-        return;
-      }
+      await saveMutation.mutateAsync({ schoolId, additions, removals });
+      // Local state refresh — TanStack invalidation only reaches useQuery
+      // subscribers. The wings array here is useState, so we still need
+      // a direct refetch until Task 4 migrates it to useQuery.
+      await loadData();
 
       toast.success("All changes saved");
-      await loadData();
       setDrafts(new Map());
       setIsEditing(false);
       setExpandedWings(new Set());
-    } catch (e) {
+    } catch (e: any) {
       console.error("Save failed:", e);
-      toast.error("Failed to save changes");
+      toast.error(e?.message ?? "Failed to save changes");
     } finally {
       setSaving(false);
     }
@@ -451,6 +425,12 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
     const { coordinators, teachers } = getEffectiveLists(wing);
     const staff = role === "coordinator" ? coordinators.find((c) => c.staff_id === staffId) : teachers.find((t) => t.staff_id === staffId);
     if (!staff) return;
+
+    // Defense-in-depth: auto-assigned teachers cannot be removed here
+    // (the X button is already disabled, but guard the handler too)
+    if (role === "teacher" && staff.auto_assigned) {
+      return;
+    }
 
     // Check if removing sole coordinator — Actor Replacement Protocol
     if (role === "coordinator" && coordinators.length === 1) {
@@ -797,12 +777,21 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
                                       role={teacher.auto_assigned ? "class_teacher" : "subject_teacher"}
                                       autoAssigned={teacher.auto_assigned}
                                     />
-                                    <button
-                                      onClick={() => handleRemoveStaff(wing.id, teacher.staff_id, "teacher")}
-                                      className="hover:text-destructive"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
+                                    {teacher.auto_assigned ? (
+                                      <span
+                                        className="opacity-40 cursor-not-allowed"
+                                        title="Auto-assigned from class assignment — remove via Subjects tab"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleRemoveStaff(wing.id, teacher.staff_id, "teacher")}
+                                        className="hover:text-destructive"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                                 {filtered.length > PAGE_SIZE && (
