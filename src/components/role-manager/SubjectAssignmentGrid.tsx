@@ -26,11 +26,19 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { autoAssignTeacherToWing, removeAutoAssignedTeacherFromWing } from "@/integrations/supabase/queries/roleAssignments";
+import { useStaffList, useSubjects } from "@/hooks/useRoleManagerQueries";
 
 interface SubjectAssignmentGridProps {
   schoolId: string;
   canEdit: boolean;
   onAssignmentChange: () => void;
+  /**
+   * Notify the parent (RoleManagerTab) that this tab has unsaved changes.
+   * For this auto-save tab: dirty = a save is in-flight OR the last save
+   * failed. Matches My School SubjectTab pattern.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 interface SectionSubject {
@@ -78,14 +86,33 @@ const getClassAcademicRank = (className: string): number => {
   return 100;
 };
 
-export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }: SubjectAssignmentGridProps) {
-  const [loading, setLoading] = useState(true);
-  const [wings, setWings] = useState<Wing[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [assignments, setAssignments] = useState<StaffAssignment[]>([]);
-  const [staffList, setStaffList] = useState<Array<{ id: string; full_name: string }>>([]);
+export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange, onDirtyChange }: SubjectAssignmentGridProps) {
+  const subjectsQuery = useSubjects(schoolId);
+  const staffListQuery = useStaffList(schoolId);
+  const sections = subjectsQuery.data?.sections ?? [];
+  const wings = subjectsQuery.data?.wings ?? [];
+  const assignments = subjectsQuery.data?.assignments ?? [];
+  const staffList = staffListQuery.data ?? [];
+  const loading = subjectsQuery.isLoading || staffListQuery.isLoading;
+
   const [activeWingTab, setActiveWingTab] = useState<string>("all");
   const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "error">("idle");
+
+  // Surface subjects fetch errors (kept from original loadData behavior)
+  useEffect(() => {
+    if (subjectsQuery.error) {
+      console.error("Failed to load subjects:", subjectsQuery.error);
+      toast.error("Failed to load subjects data");
+    }
+  }, [subjectsQuery.error]);
+
+  // Dirty tracking — auto-save tab: dirty = save in-flight or errored.
+  // Mirrors the My School SubjectTab pattern. Once the next save resolves
+  // successfully the flag clears and the user can switch tabs freely.
+  useEffect(() => {
+    onDirtyChange?.(saveStatus === "saving" || saveStatus === "error");
+  }, [saveStatus, onDirtyChange]);
 
   const cellKey = (sectionId: string, subjectId: string | null) =>
     `${sectionId}:${subjectId ?? "ct"}`;
@@ -158,75 +185,6 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }:
     );
   }, [sections]);
 
-  useEffect(() => {
-    loadData();
-  }, [schoolId]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Get current session
-      const { data: sessionData } = await supabase
-        .from("academic_sessions")
-        .select("id")
-        .eq("school_id", schoolId)
-        .eq("is_current", true)
-        .maybeSingle();
-
-      if (!sessionData) {
-        setLoading(false);
-        return;
-      }
-
-      // Fetch sections with class and subjects
-      const { data: sectionsData } = await supabase
-        .from("sections")
-        .select(`
-          id, name, acronym, display_order,
-          class:classes(id, name, wing_id, display_order),
-          section_subjects(id, subject_name, subject_code)
-        `)
-        .eq("school_id", schoolId)
-        .eq("session_id", sessionData.id)
-        .order("display_order");
-
-      setSections(sectionsData ?? []);
-
-      // Fetch wings
-      const { data: wingsData } = await supabase
-        .from("wings")
-        .select("id, name")
-        .eq("school_id", schoolId)
-        .order("display_order");
-      setWings(wingsData ?? []);
-
-      // Fetch existing assignments
-      const { data: assignmentsData } = await supabase
-        .from("staff_roles")
-        .select(`
-          id, role_type, section_id, subject_id, staff_id,
-          staff:profiles(full_name)
-        `)
-        .eq("school_id", schoolId);
-
-      setAssignments(assignmentsData ?? []);
-
-      // Fetch staff list
-      const { data: staffData } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("school_id", schoolId)
-        .eq("status", "active")
-        .order("full_name");
-
-      setStaffList(staffData ?? []);
-    } catch (e) {
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Get assignment for a cell
   const getAssignment = (sectionId: string, subjectId: string | null) => {
     return assignments.find((a) =>
@@ -252,33 +210,57 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }:
     const key = cellKey(sectionId, subjectId);
     if (busyKeys.has(key)) return; // prevent double-click race
     setBusyKeys((prev) => new Set(prev).add(key));
+    setSaveStatus("saving");
 
     try {
+      // Helper: remove auto-assigned wing entry for a given class
+      const removeWingAutoAssign = async (targetStaffId: string, targetClassId: string) => {
+        try {
+          await removeAutoAssignedTeacherFromWing(targetStaffId, targetClassId, schoolId);
+        } catch (wingErr) {
+          console.warn("Wing auto-unassign failed:", wingErr);
+        }
+      };
+
       if (!staff) {
         if (isClassTeacher) {
+          // Capture classId before delete
+          const existing = assignments.find(a => a.section_id === sectionId && a.role_type === "class_teacher");
+          const existingClassId = section?.class?.id ?? "";
           const { error } = await supabase
             .from("staff_roles")
             .delete()
             .eq("school_id", schoolId)
-            .eq("class_id", classId)
+            .eq("class_id", existingClassId)
             .eq("section_id", sectionId)
             .eq("role_type", "class_teacher");
           if (error) throw error;
+          if (existing?.staff_id) {
+            await removeWingAutoAssign(existing.staff_id, existingClassId);
+          }
         } else if (subjectId) {
+          // Capture classId before delete
+          const existing = assignments.find(a => a.section_id === sectionId && a.subject_id === subjectId && a.role_type === "subject_teacher");
+          const existingClassId = section?.class?.id ?? "";
           const { error } = await supabase
             .from("staff_roles")
             .delete()
             .eq("school_id", schoolId)
-            .eq("class_id", classId)
+            .eq("class_id", existingClassId)
             .eq("section_id", sectionId)
             .eq("subject_id", subjectId)
             .eq("role_type", "subject_teacher");
           if (error) throw error;
+          if (existing?.staff_id) {
+            await removeWingAutoAssign(existing.staff_id, existingClassId);
+          }
         }
       } else {
         // 1) Remove pre-existing row that would collide on the EXCLUSION
         //    constraint when switching to a new teacher.
         if (isClassTeacher) {
+          // Find the old assignment to get its staffId for wing cleanup
+          const oldAssignment = assignments.find(a => a.section_id === sectionId && a.role_type === "class_teacher");
           const { error } = await supabase
             .from("staff_roles")
             .delete()
@@ -288,7 +270,12 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }:
             .eq("role_type", "class_teacher")
             .neq("staff_id", staff.id);
           if (error) throw error;
+          // Remove old teacher's auto-assigned wing entry
+          if (oldAssignment?.staff_id && oldAssignment.staff_id !== staff.id) {
+            await removeWingAutoAssign(oldAssignment.staff_id, classId);
+          }
         } else if (subjectId) {
+          const oldAssignment = assignments.find(a => a.section_id === sectionId && a.subject_id === subjectId && a.role_type === "subject_teacher");
           const { error } = await supabase
             .from("staff_roles")
             .delete()
@@ -299,11 +286,14 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }:
             .eq("role_type", "subject_teacher")
             .neq("staff_id", staff.id);
           if (error) throw error;
+          if (oldAssignment?.staff_id && oldAssignment.staff_id !== staff.id) {
+            await removeWingAutoAssign(oldAssignment.staff_id, classId);
+          }
         }
 
         // 2) Upsert chosen assignment. UNIQUE onConflict keeps same-teacher
         //    re-selection idempotent.
-        const { error } = await supabase
+        const { data: upserted, error } = await supabase
           .from("staff_roles")
           .upsert({
             staff_id: staff.id,
@@ -314,8 +304,26 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }:
             subject_id: subjectId ?? null,
           }, {
             onConflict: "staff_id, role_type, class_id, section_id, subject_id",
-          });
+          })
+          .select("id")
+          .single();
         if (error) throw error;
+
+        // 3) Auto-assign to wing if class has one (graceful: don't fail save)
+        if (upserted?.id) {
+          try {
+            await autoAssignTeacherToWing(
+              staff.id,
+              classId,
+              schoolId,
+              upserted.id,
+              isClassTeacher ? "class_teacher" : "subject_teacher"
+            );
+          } catch (wingErr) {
+            // Auto-assign failure must not roll back the successful save.
+            console.warn("Wing auto-assign failed:", wingErr);
+          }
+        }
       }
 
       // 3) Audit (best-effort; if auth user missing, skip but don't fail)
@@ -340,18 +348,21 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange }:
       }
 
       // Refresh assignments
+      // 2026-06-15 fix: explicit FK name (see loadData's comment)
       const { data: assignmentsData } = await supabase
         .from("staff_roles")
         .select(`
           id, role_type, section_id, subject_id, staff_id,
-          staff:profiles(full_name)
+          staff:profiles!staff_roles_staff_id_fkey(full_name)
         `)
         .eq("school_id", schoolId);
 
       setAssignments(assignmentsData ?? []);
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (e: any) {
       toast.error(`Failed to save assignment: ${e?.message ?? "unknown"}`);
+      setSaveStatus("error");
     } finally {
       setBusyKeys((prev) => {
         const next = new Set(prev);
