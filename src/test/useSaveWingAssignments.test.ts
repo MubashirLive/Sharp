@@ -92,7 +92,7 @@ describe("useSaveWingAssignments", () => {
     ).rejects.toThrow(/Failed to save wing change/);
   });
 
-  it("still invalidates school-wide keys when additions and removals are both empty", async () => {
+  it("still invalidates staffList, all staff-roles, and wings when additions and removals are both empty", async () => {
     const { qc, wrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
 
@@ -107,7 +107,23 @@ describe("useSaveWingAssignments", () => {
     });
 
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalled();
+      const keys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
+      const hasStaffList = keys.some(
+        (k) => Array.isArray(k) && k.includes("staff-list") && k.includes("school-1")
+      );
+      const hasStaffRolesPrefix = keys.some(
+        (k) =>
+          Array.isArray(k) &&
+          k[0] === "role-manager" &&
+          k[1] === "staff-roles" &&
+          k[2] === "school-1"
+      );
+      const hasWings = keys.some(
+        (k) => Array.isArray(k) && k.includes("wings") && k.includes("school-1")
+      );
+      expect(hasStaffList).toBe(true);
+      expect(hasStaffRolesPrefix).toBe(true);
+      expect(hasWings).toBe(true);
     });
   });
 
