@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getStaffWithDetails } from "@/integrations/supabase/queries/staff";
 import {
   getStaffAllRoles,
+  getSubjectsForSchool,
   updateStaffTag, updateMasterAdmin, updateAdminRole, updateStaffRole,
   updateStaffStatus, setHouse,
   addCoordinator, removeCoordinator,
@@ -37,6 +38,14 @@ export const roleManagerKeys = {
     [...roleManagerKeys.all, "staff-roles", schoolId, staffId] as const,
   wings: (schoolId: string) =>
     [...roleManagerKeys.all, "wings", schoolId] as const,
+  subjects: (schoolId: string) =>
+    [...roleManagerKeys.all, "subjects", schoolId] as const,
+  departments: (schoolId: string) =>
+    [...roleManagerKeys.all, "departments", schoolId] as const,
+  houses: (schoolId: string) =>
+    [...roleManagerKeys.all, "houses", schoolId] as const,
+  availableStaffForWing: (schoolId: string) =>
+    [...roleManagerKeys.all, "available-staff-for-wing", schoolId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +80,17 @@ export function useWingsForSchool(schoolId: string | undefined) {
       ? roleManagerKeys.wings(schoolId)
       : ["role-manager", "wings", "noop"],
     queryFn: () => getWingsWithFullDetails(schoolId!),
+    enabled: !!schoolId,
+    staleTime: 60_000,
+  });
+}
+
+export function useSubjects(schoolId: string | undefined) {
+  return useQuery({
+    queryKey: schoolId
+      ? roleManagerKeys.subjects(schoolId)
+      : ["role-manager", "subjects", "noop"],
+    queryFn: () => getSubjectsForSchool(schoolId!),
     enabled: !!schoolId,
     staleTime: 60_000,
   });
