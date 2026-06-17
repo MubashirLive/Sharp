@@ -6,10 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
-  getAvailableStaffForWing,
   type WingWithStats,
 } from "@/integrations/supabase/queries/wings";
-import { useSaveWingAssignments, useWingsForSchool } from "@/hooks/useRoleManagerQueries";
+import { useAvailableStaffForWing, useSaveWingAssignments, useWingsForSchool } from "@/hooks/useRoleManagerQueries";
 import { WingStaffBadge } from "./WingStaffBadge";
 import { CoordinatorReplacementDialog } from "./CoordinatorReplacementDialog";
 import { CoordinatorsViewAllModal } from "./CoordinatorsViewAllModal";
@@ -17,6 +16,12 @@ import { CoordinatorsViewAllModal } from "./CoordinatorsViewAllModal";
 interface WingsAssignmentTabProps {
   schoolId: string;
   canEdit: boolean;
+  /**
+   * Notify the parent (RoleManagerTab) that this tab has unsaved draft
+   * changes. Parent gates tab-switching with the UnsavedChangesDialog
+   * when any tab reports dirty=true.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 // Academic rank for sorting classes
@@ -171,12 +176,11 @@ interface WingDraft {
 }
 
 // Main component
-export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProps) {
+export function WingsAssignmentTab({ schoolId, canEdit, onDirtyChange }: WingsAssignmentTabProps) {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [drafts, setDrafts] = useState<Map<string, WingDraft>>(new Map());
   const [expandedWings, setExpandedWings] = useState<Set<string>>(new Set());
-  const [availableStaff, setAvailableStaff] = useState<Array<{ id: string; full_name: string; father_name?: string }>>([]);
   const [viewAllModalOpen, setViewAllModalOpen] = useState(false);
   const [viewAllModalWingId, setViewAllModalWingId] = useState<string | null>(null);
   const [replacementDialogOpen, setReplacementDialogOpen] = useState(false);
@@ -191,6 +195,8 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
 
   const saveMutation = useSaveWingAssignments(schoolId);
   const wingsQuery = useWingsForSchool(schoolId);
+  const availableStaffQuery = useAvailableStaffForWing(schoolId);
+  const availableStaff = availableStaffQuery.data ?? [];
   const loading = wingsQuery.isLoading;
   const wings = useMemo(() => {
     const wingsData = wingsQuery.data ?? [];
@@ -216,22 +222,13 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
     }
   }, [wingsQuery.error]);
 
-  // One-shot picker data fetch — kept outside TanStack on purpose: this
-  // is a modal-population fetch, not a per-school subscription that
-  // needs cross-component invalidation.
+  // Dirty tracking — Wings uses an Edit → Save flow with explicit drafts.
+  // Report dirty=true when the user has entered edit mode AND has at
+  // least one non-empty draft. Parent gates tab-switching on this.
+  const isDirty = isEditing && drafts.size > 0;
   useEffect(() => {
-    let cancelled = false;
-    getAvailableStaffForWing(schoolId)
-      .then((staff) => {
-        if (!cancelled) setAvailableStaff(staff);
-      })
-      .catch((e) => {
-        console.error("Failed to load available staff:", e);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [schoolId]);
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Before unload guard
   useEffect(() => {
