@@ -23,7 +23,7 @@ import {
   addDepartmentMember, removeDepartmentMember, removeDepartmentIncharge,
   type StaffAllRoles,
 } from "@/integrations/supabase/queries/roleAssignments";
-import { addStaffToWing, removeStaffFromWing } from "@/integrations/supabase/queries/wings";
+import { addStaffToWing, getWingsWithFullDetails, removeStaffFromWing } from "@/integrations/supabase/queries/wings";
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -60,6 +60,17 @@ export function useStaffRoles(staffId: string, schoolId: string | undefined) {
       ? roleManagerKeys.staffRoles(schoolId, staffId)
       : ["role-manager", "staff-roles", "noop"],
     queryFn: () => getStaffAllRoles(staffId, schoolId!),
+    enabled: !!schoolId,
+    staleTime: 60_000,
+  });
+}
+
+export function useWingsForSchool(schoolId: string | undefined) {
+  return useQuery({
+    queryKey: schoolId
+      ? roleManagerKeys.wings(schoolId)
+      : ["role-manager", "wings", "noop"],
+    queryFn: () => getWingsWithFullDetails(schoolId!),
     enabled: !!schoolId,
     staleTime: 60_000,
   });
@@ -155,13 +166,12 @@ export function useSaveStaffRoles(schoolId: string | undefined) {
       }
 
       // 2. Coordinator (wings) — multi-wing
-      const origCoordWingIds = original.coordinator ? [original.coordinator.wing_id] : [];
+      const origCoordWings = original.coordinator_wings;
+      const origCoordWingIds = origCoordWings.map((c) => c.wing_id);
       const newCoordWingIds = draft.coordinatorWingIds;
-      for (const wingId of origCoordWingIds) {
-        if (!newCoordWingIds.includes(wingId)) {
-          if (original.coordinator && original.coordinator.wing_id === wingId) {
-            await removeCoordinator(original.coordinator.id, staffId, sId, currentUserId);
-          }
+      for (const c of origCoordWings) {
+        if (!newCoordWingIds.includes(c.wing_id)) {
+          await removeCoordinator(c.id, staffId, sId, currentUserId);
         }
       }
       for (const wingId of newCoordWingIds) {

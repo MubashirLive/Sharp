@@ -6,11 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
-  getWingsWithFullDetails,
   getAvailableStaffForWing,
   type WingWithStats,
 } from "@/integrations/supabase/queries/wings";
-import { useSaveWingAssignments } from "@/hooks/useRoleManagerQueries";
+import { useSaveWingAssignments, useWingsForSchool } from "@/hooks/useRoleManagerQueries";
 import { WingStaffBadge } from "./WingStaffBadge";
 import { CoordinatorReplacementDialog } from "./CoordinatorReplacementDialog";
 import { CoordinatorsViewAllModal } from "./CoordinatorsViewAllModal";
@@ -173,9 +172,7 @@ interface WingDraft {
 
 // Main component
 export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProps) {
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [wings, setWings] = useState<WingWithStats[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [drafts, setDrafts] = useState<Map<string, WingDraft>>(new Map());
   const [expandedWings, setExpandedWings] = useState<Set<string>>(new Set());
@@ -193,40 +190,48 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
   const PAGE_SIZE = 25;
 
   const saveMutation = useSaveWingAssignments(schoolId);
+  const wingsQuery = useWingsForSchool(schoolId);
+  const loading = wingsQuery.isLoading;
+  const wings = useMemo(() => {
+    const wingsData = wingsQuery.data ?? [];
+    return [...wingsData].sort((a, b) => {
+      const aMin = a.classes.length
+        ? Math.min(...a.classes.map((c) => getClassAcademicRank(c.name)))
+        : 999;
+      const bMin = b.classes.length
+        ? Math.min(...b.classes.map((c) => getClassAcademicRank(c.name)))
+        : 999;
+      return aMin - bMin;
+    });
+  }, [wingsQuery.data]);
 
-  // Load wings data
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const wingsData = await getWingsWithFullDetails(schoolId);
-
-      // Sort wings by academic level
-      const sortedWings = [...wingsData].sort((a, b) => {
-        const aMin = a.classes.length
-          ? Math.min(...a.classes.map((c) => getClassAcademicRank(c.name)))
-          : 999;
-        const bMin = b.classes.length
-          ? Math.min(...b.classes.map((c) => getClassAcademicRank(c.name)))
-          : 999;
-        return aMin - bMin;
-      });
-
-      setWings(sortedWings);
-
-      // Load available staff
-      const staff = await getAvailableStaffForWing(schoolId);
-      setAvailableStaff(staff);
-    } catch (e) {
-      console.error("Failed to load wings:", e);
-      toast.error("Failed to load wings data");
-    } finally {
-      setLoading(false);
-    }
-  }, [schoolId]);
-
+  // Surface wings fetch errors — original loadData called toast.error on
+  // failure. Without this, a failed fetch (network, RLS, etc.) falls
+  // through to the empty state and the user sees "No wings created yet"
+  // even when wings exist.
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (wingsQuery.error) {
+      console.error("Failed to load wings:", wingsQuery.error);
+      toast.error("Failed to load wings data");
+    }
+  }, [wingsQuery.error]);
+
+  // One-shot picker data fetch — kept outside TanStack on purpose: this
+  // is a modal-population fetch, not a per-school subscription that
+  // needs cross-component invalidation.
+  useEffect(() => {
+    let cancelled = false;
+    getAvailableStaffForWing(schoolId)
+      .then((staff) => {
+        if (!cancelled) setAvailableStaff(staff);
+      })
+      .catch((e) => {
+        console.error("Failed to load available staff:", e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolId]);
 
   // Before unload guard
   useEffect(() => {
@@ -332,7 +337,7 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
 
   // Cancel edit mode
   const cancelEdit = async () => {
-    await loadData();
+    await wingsQuery.refetch();
     setDrafts(new Map());
     setIsEditing(false);
     setExpandedWings(new Set());
@@ -362,10 +367,9 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
       });
 
       await saveMutation.mutateAsync({ schoolId, additions, removals });
-      // Local state refresh — TanStack invalidation only reaches useQuery
-      // subscribers. The wings array here is useState, so we still need
-      // a direct refetch until Task 4 migrates it to useQuery.
-      await loadData();
+      // useSaveWingAssignments.onSuccess invalidates
+      // roleManagerKeys.wings(schoolId), which the active useWingsForSchool
+      // query is subscribed to — no manual refetch needed here.
 
       toast.success("All changes saved");
       setDrafts(new Map());
@@ -551,6 +555,18 @@ export function WingsAssignmentTab({ schoolId, canEdit }: WingsAssignmentTabProp
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Error state — show retry so user can recover without a full reload
+  if (wingsQuery.error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-2">Failed to load wings</p>
+        <Button variant="outline" size="sm" onClick={() => wingsQuery.refetch()}>
+          Retry
+        </Button>
       </div>
     );
   }
