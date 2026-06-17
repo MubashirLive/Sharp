@@ -24,7 +24,9 @@ import {
   addDepartmentMember, removeDepartmentMember, removeDepartmentIncharge,
   type StaffAllRoles,
 } from "@/integrations/supabase/queries/roleAssignments";
-import { addStaffToWing, getWingsWithFullDetails, removeStaffFromWing } from "@/integrations/supabase/queries/wings";
+import { addStaffToWing, getAvailableStaffForWing, getWingsWithFullDetails, removeStaffFromWing } from "@/integrations/supabase/queries/wings";
+import { getDepartmentsWithDetails } from "@/integrations/supabase/queries/departments";
+import { getHousesWithStats } from "@/integrations/supabase/queries/houses";
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -93,6 +95,39 @@ export function useSubjects(schoolId: string | undefined) {
     queryFn: () => getSubjectsForSchool(schoolId!),
     enabled: !!schoolId,
     staleTime: 60_000,
+  });
+}
+
+export function useDepartments(schoolId: string | undefined) {
+  return useQuery({
+    queryKey: schoolId
+      ? roleManagerKeys.departments(schoolId)
+      : ["role-manager", "departments", "noop"],
+    queryFn: () => getDepartmentsWithDetails(schoolId!),
+    enabled: !!schoolId,
+    staleTime: 60_000,
+  });
+}
+
+export function useHouses(schoolId: string | undefined) {
+  return useQuery({
+    queryKey: schoolId
+      ? roleManagerKeys.houses(schoolId)
+      : ["role-manager", "houses", "noop"],
+    queryFn: () => getHousesWithStats(schoolId!),
+    enabled: !!schoolId,
+    staleTime: 60_000,
+  });
+}
+
+export function useAvailableStaffForWing(schoolId: string | undefined) {
+  return useQuery({
+    queryKey: schoolId
+      ? roleManagerKeys.availableStaffForWing(schoolId)
+      : ["role-manager", "available-staff-for-wing", "noop"],
+    queryFn: () => getAvailableStaffForWing(schoolId!),
+    enabled: !!schoolId,
+    staleTime: 5 * 60_000, // 5 min — picker data changes rarely
   });
 }
 
