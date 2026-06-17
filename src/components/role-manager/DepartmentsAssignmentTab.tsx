@@ -17,12 +17,19 @@ import {
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { logDepartmentAction } from "@/integrations/supabase/queries/departments";
+import { useDepartments } from "@/hooks/useRoleManagerQueries";
 import { DepartmentLogPanel } from "@/components/departments/DepartmentLogPanel";
 
 interface DepartmentsAssignmentTabProps {
   schoolId: string;
   canEdit: boolean;
   onAssignmentChange: () => void;
+  /**
+   * Notify the parent (RoleManagerTab) that this tab has unsaved changes.
+   * For this auto-save tab: dirty = a save is in-flight OR the last save
+   * failed. Matches My School SubjectTab pattern.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 interface Department {
@@ -38,12 +45,17 @@ interface DeptMember {
   status: string;
 }
 
-export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange }: DepartmentsAssignmentTabProps) {
+export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange, onDirtyChange }: DepartmentsAssignmentTabProps) {
   const { user } = useAuth();
   const currentUserId = user?.id ?? "";
   const currentUserName = user?.full_name ?? "Current User";
 
-  const [loading, setLoading] = useState(true);
+  // Single source of truth — the same 4 fetches that loadData() used to
+  // do inline are now consolidated into getDepartmentsWithDetails. We
+  // adapt the result into the existing local state shape so the rest of
+  // the component is unchanged.
+  const departmentsQuery = useDepartments(schoolId);
+  const loading = departmentsQuery.isLoading;
   const [departments, setDepartments] = useState<Department[]>([]);
   const [deptMembers, setDeptMembers] = useState<Map<string, DeptMember[]>>(new Map());
   const [deptIncharges, setDeptIncharges] = useState<Map<string, DeptMember[]>>(new Map());
@@ -76,87 +88,73 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
   const [settingsVisibility, setSettingsVisibility] = useState<string[]>([]);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
+  // Save status — shared across all auto-save actions and the
+  // messenger settings save. Drives the parent's onDirtyChange signal.
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "error">("idle");
   useEffect(() => {
-    loadData();
-  }, [schoolId]);
+    onDirtyChange?.(saveStatus === "saving" || saveStatus === "error");
+  }, [saveStatus, onDirtyChange]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Fetch departments with messenger settings
-      const { data: deptsData } = await supabase
-        .from("departments")
-        .select("id, name, messenger_settings")
-        .eq("school_id", schoolId)
-        .order("name");
-
-      const depts: Department[] = (deptsData ?? []).map((d: any) => ({
-        id: d.id,
-        name: d.name ?? "",
-        messenger_settings: d.messenger_settings ?? { who_can_use: "incharges_only", visibility: [] },
-      }));
-      setDepartments(depts);
-
-      // Fetch department members
-      const { data: membersData } = await supabase
-        .from("departments_staff")
-        .select(`department_id, staff_profile_id, staff:profiles!staff_profile_id(full_name, status, staff_profiles!profile_id(father_name))`)
-        .eq("school_id", schoolId);
-
-      const membersMap = new Map<string, DeptMember[]>();
-      membersData?.forEach((m: any) => {
-        const existing = membersMap.get(m.department_id) ?? [];
-        existing.push({
-          staff_profile_id: m.staff_profile_id,
-          full_name: m.staff?.full_name ?? "Unknown",
-          father_name: m.staff?.staff_profiles?.father_name ?? undefined,
-          status: m.staff?.status ?? "inactive",
-        });
-        membersMap.set(m.department_id, existing);
-      });
-      setDeptMembers(membersMap);
-
-      // Fetch incharges (supports multiple per dept)
-      const { data: inchrgsData } = await supabase
-        .from("department_incharges")
-        .select(`department_id, staff_profile_id, staff:profiles!staff_profile_id(full_name, status, staff_profiles!profile_id(father_name))`)
-        .eq("school_id", schoolId);
-
-      const inchargesMap = new Map<string, DeptMember[]>();
-      inchrgsData?.forEach((i: any) => {
-        const existing = inchargesMap.get(i.department_id) ?? [];
-        existing.push({
-          staff_profile_id: i.staff_profile_id,
-          full_name: i.staff?.full_name ?? "Unknown",
-          father_name: i.staff?.staff_profiles?.father_name ?? undefined,
-          status: i.staff?.status ?? "inactive",
-        });
-        inchargesMap.set(i.department_id, existing);
-      });
-      setDeptIncharges(inchargesMap);
-
-      // Fetch staff list
-      const { data: staffData } = await supabase
-        .from("staff_profiles")
-        .select("profile_id, full_name, father_name")
-        .eq("school_id", schoolId)
-        .order("full_name");
-
-      const mapped = (staffData ?? []).map((s: any) => ({
-        id: s.profile_id,
-        full_name: s.full_name,
-        father_name: s.father_name,
-      }));
-      setStaffList(mapped);
-    } catch (e) {
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
+  // Surface fetch errors
+  useEffect(() => {
+    if (departmentsQuery.error) {
+      console.error("Failed to load departments:", departmentsQuery.error);
+      toast.error("Failed to load departments data");
     }
-  };
+  }, [departmentsQuery.error]);
+
+  // Adapt query data into the local state shape used by the rest of
+  // the component. Fires once per query update (and on first mount
+  // when data arrives). On any tab switch that mutates staff
+  // assignments the parent invalidates the departments query key
+  // and this re-runs.
+  useEffect(() => {
+    const data = departmentsQuery.data;
+    if (!data) return;
+
+    const depts: Department[] = data.map((d) => ({
+      id: d.id,
+      name: d.name,
+      messenger_settings: d.messenger_settings,
+    }));
+    setDepartments(depts);
+
+    const membersMap = new Map<string, DeptMember[]>();
+    const inchargesMap = new Map<string, DeptMember[]>();
+    const staffMap = new Map<string, { id: string; full_name: string; father_name?: string }>();
+
+    for (const dept of data) {
+      const mems: DeptMember[] = [];
+      const inchs: DeptMember[] = [];
+      for (const m of dept.members) {
+        const entry: DeptMember = {
+          staff_profile_id: m.staff_profile_id,
+          full_name: m.staff_name,
+          father_name: m.father_name,
+          status: "active",
+        };
+        staffMap.set(m.staff_profile_id, {
+          id: m.staff_profile_id,
+          full_name: m.staff_name,
+          father_name: m.father_name,
+        });
+        if (m.role === "incharge") {
+          inchs.push(entry);
+        } else {
+          mems.push(entry);
+        }
+      }
+      membersMap.set(dept.id, mems);
+      inchargesMap.set(dept.id, inchs);
+    }
+    setDeptMembers(membersMap);
+    setDeptIncharges(inchargesMap);
+    setStaffList(Array.from(staffMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name)));
+  }, [departmentsQuery.data]);
 
   // --- Add member ---
   const handleAddMember = async (deptId: string, staff: { id: string; full_name: string }) => {
+    setSaveStatus("saving");
     try {
       await supabase.from("departments_staff").insert({
         department_id: deptId,
@@ -177,15 +175,18 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
 
       toast.success(`${staff.full_name} added to department`);
       setPickerOpen(null);
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (_e) {
       toast.error("Failed to add member");
+      setSaveStatus("error");
     }
   };
 
   // --- Set incharge ---
   const handleSetIncharge = async (deptId: string, staff: { id: string; full_name: string }) => {
+    setSaveStatus("saving");
     try {
       // Make sure they are also a member
       const existing = deptMembers.get(deptId)?.find((m) => m.staff_profile_id === staff.id);
@@ -220,10 +221,12 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
 
       toast.success(`${staff.full_name} set as Incharge`);
       setPickerOpen(null);
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (_e) {
       toast.error("Failed to set incharge");
+      setSaveStatus("error");
     }
   };
 
@@ -244,6 +247,7 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       return;
     }
 
+    setSaveStatus("saving");
     try {
       await supabase
         .from("department_incharges")
@@ -263,16 +267,19 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       });
 
       toast.success("Incharge removed");
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (_e) {
       toast.error("Failed to remove incharge");
+      setSaveStatus("error");
     }
   };
 
   // --- Actor Replacement: pick replacement ---
   const handleActorAssignReplacement = async (replacementId: string) => {
     if (!actorContext) return;
+    setSaveStatus("saving");
     try {
       const replacement = staffList.find((s) => s.id === replacementId);
       const replacementName = replacement?.full_name ?? "Replacement";
@@ -329,16 +336,19 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       setActorContext(null);
       setActorPickerOpen(false);
       setActorSearch("");
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (_e) {
       toast.error("Failed to assign replacement");
+      setSaveStatus("error");
     }
   };
 
   // --- Actor Replacement: I become incharge ---
   const handleActorBecomeIncharge = async () => {
     if (!actorContext) return;
+    setSaveStatus("saving");
     try {
       await supabase.from("department_incharges").upsert(
         {
@@ -387,10 +397,12 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       toast.success(`You are now Incharge of ${actorContext.deptName}`);
       setActorDialogOpen(false);
       setActorContext(null);
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (_e) {
       toast.error("Failed to become incharge");
+      setSaveStatus("error");
     }
   };
 
@@ -413,6 +425,7 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       return;
     }
 
+    setSaveStatus("saving");
     try {
       await supabase
         .from("department_incharges")
@@ -438,10 +451,12 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       });
 
       toast.success("Member removed");
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
       onAssignmentChange();
     } catch (_e) {
       toast.error("Failed to remove member");
+      setSaveStatus("error");
     }
   };
 
@@ -457,6 +472,7 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
   const handleSaveSettings = async () => {
     if (!settingsDept) return;
     setSettingsSaving(true);
+    setSaveStatus("saving");
     try {
       const messenger_settings = {
         who_can_use: settingsWhoCanUse,
@@ -480,9 +496,11 @@ export function DepartmentsAssignmentTab({ schoolId, canEdit, onAssignmentChange
       toast.success("Settings saved");
       setSettingsDialogOpen(false);
       setSettingsDept(null);
-      await loadData();
+      await departmentsQuery.refetch();
+      setSaveStatus("idle");
     } catch (_e) {
       toast.error("Failed to save settings");
+      setSaveStatus("error");
     } finally {
       setSettingsSaving(false);
     }
