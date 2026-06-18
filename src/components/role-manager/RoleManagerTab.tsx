@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Loader2, BookOpen, Users, Building2, Home, UserCog } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getStaffWithDetails, type StaffWithDetails } from "@/integrations/supabase/queries/staff";
 import { RoleFilterBar } from "./RoleFilterBar";
 import { StaffRoleCard } from "./StaffRoleCard";
 import { SubjectAssignmentGrid } from "./SubjectAssignmentGrid";
@@ -11,6 +10,7 @@ import { WingsAssignmentTab } from "./WingsAssignmentTab";
 import { DepartmentsAssignmentTab } from "./DepartmentsAssignmentTab";
 import { HousesAssignmentTab } from "./HousesAssignmentTab";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
+import { useStaffList, useRefreshStaffList } from "@/hooks/useRoleManagerQueries";
 
 export interface RoleFilters {
   search?: string;
@@ -28,6 +28,16 @@ export interface RoleManagerTabProps {
   canEdit: boolean;
 }
 
+// Human-readable labels for the unsaved-changes modal. Keys must
+// match the Tabs value prop on each TabsContent below.
+const TAB_LABELS: Record<string, string> = {
+  staff: "Staff",
+  subjects: "Subjects",
+  wings: "Wings",
+  departments: "Departments",
+  houses: "Houses",
+};
+
 export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
   const { role, user } = useAuth();
   const currentUserId = user?.id ?? "";
@@ -35,31 +45,29 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
   const isMasterAdmin = role === "master_admin";
   const [activeTab, setActiveTab] = useState("staff");
 
-  const [staff, setStaff] = useState<StaffWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<RoleFilters>({});
 
-  // Dirty tracking for page-leave guard
-  const [anyDirty, setAnyDirty] = useState(false);
+  // Per-tab dirty tracking. Each sub-tab reports its own dirty state
+  // (in-flight save, failed save, or pending draft) via onDirtyChange.
+  // The parent aggregates to a single `anyDirty` for the gate and
+  // remembers which tab is dirty for the modal's "fromTabLabel".
+  const [dirtyByTab, setDirtyByTab] = useState<Record<string, boolean>>({});
+  const [dirtyTabLabel, setDirtyTabLabel] = useState<string>("another tab");
+  const anyDirty = Object.values(dirtyByTab).some(Boolean);
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   // "Stay" / "Leave" choice for in-app nav block
   const [pendingNav, setPendingNav] = useState<null | ((shouldLeave: boolean) => void)>(null);
 
+  // Staff directory — single source of truth via TanStack Query. The card
+  // mutations also invalidate this key on success, so cross-staff class-
+  // teacher reassigns (Amit loses 10th A, Anjali gains it) update this list
+  // in lockstep. See useRoleManagerQueries.ts.
+  const { data: staff = [], isLoading: loading, error: staffError } = useStaffList(schoolId);
+  const refreshStaff = useRefreshStaffList(schoolId);
+
   useEffect(() => {
-    if (!schoolId) { setLoading(false); return; }
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data = await getStaffWithDetails(schoolId);
-        setStaff(data);
-      } catch (e) {
-        toast.error("Failed to load staff");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [schoolId]);
+    if (staffError) toast.error("Failed to load staff");
+  }, [staffError]);
 
   const filteredStaff = useMemo(() => {
     let result = staff.filter((s) => s.status === "active" || s.status === "inactive");
@@ -93,14 +101,18 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
     return result;
   }, [staff, filters]);
 
-  const handleRefreshStaff = async () => {
-    const data = await getStaffWithDetails(schoolId);
-    setStaff(data);
-  };
+  // Stable callback passed to each sub-tab. Bails when the value is
+  // unchanged to avoid re-render storms on every keystroke.
+  const setTabDirty = useCallback((tab: string, isDirty: boolean) => {
+    setDirtyByTab((prev) => (prev[tab] === isDirty ? prev : { ...prev, [tab]: isDirty }));
+  }, []);
 
   const handleTabChange = (next: string) => {
     if (next === activeTab) return;
     if (anyDirty) {
+      // Find which tab reported dirty (for the modal's "from" label).
+      const dirtyTab = Object.entries(dirtyByTab).find(([, v]) => v)?.[0];
+      if (dirtyTab) setDirtyTabLabel(TAB_LABELS[dirtyTab] ?? dirtyTab);
       setPendingTab(next);
     } else {
       setActiveTab(next);
@@ -108,7 +120,7 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
   };
 
   const discardAndSwitch = () => {
-    setAnyDirty(false);
+    setDirtyByTab({});
     if (pendingTab) setActiveTab(pendingTab);
     setPendingTab(null);
   };
@@ -182,8 +194,8 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
                     isMasterAdmin={isMasterAdmin}
                     canEdit={canEdit}
                     isOwnCard={s.id === currentUserId}
-                    onRefresh={handleRefreshStaff}
-                    onDirtyChange={setAnyDirty}
+                    onRefresh={async () => { await refreshStaff(); }}
+                    onDirtyChange={(d) => setTabDirty("staff", d)}
                   />
                 ))}
               </div>
@@ -197,7 +209,8 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
         <SubjectAssignmentGrid
           schoolId={schoolId}
           canEdit={canEdit}
-          onAssignmentChange={handleRefreshStaff}
+          onAssignmentChange={async () => { await refreshStaff(); }}
+          onDirtyChange={(d) => setTabDirty("subjects", d)}
         />
       </TabsContent>
 
@@ -206,6 +219,7 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
         <WingsAssignmentTab
           schoolId={schoolId}
           canEdit={canEdit}
+          onDirtyChange={(d) => setTabDirty("wings", d)}
         />
       </TabsContent>
 
@@ -214,7 +228,8 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
         <DepartmentsAssignmentTab
           schoolId={schoolId}
           canEdit={canEdit}
-          onAssignmentChange={handleRefreshStaff}
+          onAssignmentChange={async () => { await refreshStaff(); }}
+          onDirtyChange={(d) => setTabDirty("departments", d)}
         />
       </TabsContent>
 
@@ -223,12 +238,14 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
         <HousesAssignmentTab
           schoolId={schoolId}
           canEdit={canEdit}
-          onAssignmentChange={handleRefreshStaff}
+          onAssignmentChange={async () => { await refreshStaff(); }}
+          onDirtyChange={(d) => setTabDirty("houses", d)}
         />
       </TabsContent>
 
       <UnsavedChangesDialog
         open={pendingTab !== null}
+        fromTabLabel={dirtyTabLabel}
         onDiscard={discardAndSwitch}
         onCancel={() => setPendingTab(null)}
       />
