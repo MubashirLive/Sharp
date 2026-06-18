@@ -14,8 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useHouses } from "@/hooks/useRoleManagerQueries";
 import {
-  getHousesWithStats,
   assignStaffToHouse,
   removeStaffFromHouse,
   setHouseIncharge,
@@ -105,14 +105,15 @@ function StaffCommand({ staffList, onSelect, excludeIds = [] }: StaffCommandProp
 
 export const HousesAssignmentTab = forwardRef<HousesAssignmentTabHandle, HousesAssignmentTabProps>(({ schoolId, canEdit, onAssignmentChange, onDirtyChange }, ref) => {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const housesQuery = useHouses(schoolId);
+  const loading = housesQuery.isLoading;
   const [housesWithStats, setHousesWithStats] = useState<HouseWithStats[]>([]);
+  const [originalHouses, setOriginalHouses] = useState<HouseWithStats[]>([]);
   const [availableStaff, setAvailableStaff] = useState<Array<{ id: string; full_name: string; father_name?: string }>>([]);
   const [saving, setSaving] = useState(false);
 
   // Edit mode + drafts
   const [isEditing, setIsEditing] = useState(false);
-  const [originalHouses, setOriginalHouses] = useState<HouseWithStats[]>([]);
   const [drafts, setDrafts] = useState<Map<string, HouseDraft>>(new Map());
 
   // Expose save to parent
@@ -124,37 +125,43 @@ export const HousesAssignmentTab = forwardRef<HousesAssignmentTabHandle, HousesA
   const [expandedHouses, setExpandedHouses] = useState<Set<string>>(new Set());
   const [expandedData, setExpandedData] = useState<Map<string, HouseStaffGroupedByWing[]>>(new Map());
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [housesData, staffData] = await Promise.all([
-        getHousesWithStats(schoolId),
-        supabase
-          .from("staff_profiles")
-          .select("profile_id, full_name, father_name")
-          .eq("school_id", schoolId)
-          .order("full_name"),
-      ]);
+  // Adapt query data into local state. Also seeds the Edit-mode
+  // baseline (`originalHouses`) on first arrival and after saves.
+  useEffect(() => {
+    if (!housesQuery.data) return;
+    setHousesWithStats(housesQuery.data);
+    setOriginalHouses(housesQuery.data);
+  }, [housesQuery.data]);
 
-      setHousesWithStats(housesData);
-      setOriginalHouses(housesData);
+  // Surface fetch errors
+  useEffect(() => {
+    if (housesQuery.error) {
+      console.error("Failed to load houses:", housesQuery.error);
+      toast.error("Failed to load house data");
+    }
+  }, [housesQuery.error]);
+
+  // Available staff for the picker — separate fetch, lives outside the
+  // useHouses cache because it's a large list and the picker only
+  // needs id + name. Re-fetched when schoolId changes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("staff_profiles")
+        .select("profile_id, full_name, father_name")
+        .eq("school_id", schoolId)
+        .order("full_name");
+      if (cancelled) return;
       setAvailableStaff(
-        ((staffData.data ?? []) as any[]).map((s) => ({
+        ((data ?? []) as any[]).map((s) => ({
           id: s.profile_id,
           full_name: s.full_name,
           father_name: s.father_name,
         }))
       );
-    } catch (e) {
-      console.error("Failed to load house data:", e);
-      toast.error("Failed to load house data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
+    })();
+    return () => { cancelled = true; };
   }, [schoolId]);
 
   // Compute hasChanges
@@ -229,7 +236,7 @@ export const HousesAssignmentTab = forwardRef<HousesAssignmentTabHandle, HousesA
 
       await Promise.all(operations);
       toast.success(`All changes saved`);
-      await loadData();
+      await housesQuery.refetch();
       setDrafts(new Map());
       setIsEditing(false);
       setExpandedHouses(new Set());
@@ -306,31 +313,25 @@ export const HousesAssignmentTab = forwardRef<HousesAssignmentTabHandle, HousesA
     }));
   };
 
+  // HouseStats has no incharges/staff arrays — those come from getHouseIncharges
+  // / getHouseStaffGroupedByWing. For the inline-edit preview, only show
+  // draft additions/removals; the full lists are loaded on expand.
   const getEffectiveLists = useCallback(
-    (house: HouseWithStats, draft: HouseDraft | undefined) => {
-      const incharges = house.incharges.filter((ic) => !draft?.removedInchargeIds.includes(ic.staffId));
-      const staff = house.staff.filter((s) => !draft?.removedStaffIds.includes(s.staffId));
-
+    (_house: HouseWithStats, draft: HouseDraft | undefined) => {
       return {
-        incharges: [
-          ...incharges,
-          ...(draft?.addedIncharges ?? []).map((a) => ({
-            staffId: a.staffId,
-            fullName: a.staffName,
-            fatherName: a.fatherName,
-          })),
-        ],
-        staff: [
-          ...staff,
-          ...(draft?.addedStaff ?? []).map((a) => ({
-            staffId: a.staffId,
-            fullName: a.staffName,
-            fatherName: a.fatherName,
-            gender: a.gender ?? null,
-            isIncharge: false,
-            wings: [],
-          })),
-        ],
+        incharges: (draft?.addedIncharges ?? []).map((a) => ({
+          staffId: a.staffId,
+          fullName: a.staffName,
+          fatherName: a.fatherName,
+        })),
+        staff: (draft?.addedStaff ?? []).map((a) => ({
+          staffId: a.staffId,
+          fullName: a.staffName,
+          fatherName: a.fatherName,
+          gender: a.gender ?? null,
+          isIncharge: false,
+          wings: [],
+        })),
       };
     },
     []
@@ -382,11 +383,12 @@ export const HousesAssignmentTab = forwardRef<HousesAssignmentTabHandle, HousesA
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {housesWithStats.map(({ definition, stats }) => {
+        {housesWithStats.map((house) => {
+          const { definition, stats } = house;
           const isExpanded = expandedHouses.has(definition.name);
           const draft = drafts.get(definition.name);
           const { incharges: effectiveIncharges, staff: effectiveStaff } = getEffectiveLists(
-            { definition, stats, incharges: stats.incharges, staff: stats.staff } as any,
+            house,
             draft
           );
           const isOtherCardBeingEdited = isEditing && !draft;
