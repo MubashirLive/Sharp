@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMessengerPanel } from "@/contexts/MessengerContext";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function Home() {
   const { user, school, profile, role, isSuperAdmin, refresh } = useAuth();
+  const { open: openMessenger } = useMessengerPanel();
   const [claiming, setClaiming] = useState(false);
   const dashboardStatus = useDashboardAttendanceStatus();
 
@@ -119,7 +121,12 @@ export default function Home() {
               <DashboardCard icon={Users} title="My Staff" desc="Teachers, admin & support staff" to="/people" />
               <DashboardCard icon={GraduationCap} title="My Students" desc="Students, class & enrollment" to="/students" />
               <DashboardCard icon={CalendarDays} title="Calendar" desc="Holidays, events, meetings & tasks" to="/calendar" />
-              <DashboardCard icon={MessageSquare} title="Messages" desc="School communication hub" to="/messenger" />
+              <ActionCard
+                icon={MessageSquare}
+                title="Messages"
+                desc="School communication hub"
+                onClick={openMessenger}
+              />
               <DashboardCard icon={UserCog} title="Role Manager" desc="Assign staff roles, subjects, wings & departments" to="/role-manager" />
               {(role === "class_teacher" || role === "coordinator") ? (
                 <>
@@ -183,5 +190,33 @@ function DashboardCard({
         <p className="text-sm text-muted-foreground mt-0.5">{desc}</p>
       </div>
     </Link>
+  );
+}
+
+function ActionCard({
+  icon: Icon,
+  title,
+  desc,
+  onClick,
+}: {
+  icon: any;
+  title: string;
+  desc: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group block text-left w-full"
+    >
+      <div className="h-full rounded-xl border bg-card px-5 py-4 shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:-translate-y-0.5 cursor-pointer">
+        <div className="h-10 w-10 rounded-xl bg-gradient-primary grid place-items-center mb-3 shadow-sm">
+          <Icon className="h-5 w-5 text-white" />
+        </div>
+        <h3 className="font-semibold text-base">{title}</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">{desc}</p>
+      </div>
+    </button>
   );
 }

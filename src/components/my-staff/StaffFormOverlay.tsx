@@ -18,6 +18,7 @@ import type { StaffTabId, StaffFormIdentity } from "@/components/staff/StaffForm
 import type { StaffWithDetails } from "@/integrations/supabase/queries/staff";
 import type { StaffFormData } from "@/lib/schemas";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMessengerPanel } from "@/contexts/MessengerContext";
 
 export type StaffFormOverlayMode = 'view' | 'edit' | 'create';
 
@@ -178,6 +179,7 @@ function formDataToStaff(formData: StaffFormData): Partial<StaffWithDetails> {
 
 export function StaffFormOverlay({ staff, schoolId, onClose, onSave, mode = 'view', onDelete, canDelete = false }: StaffFormOverlayProps) {
   const { school } = useAuth();
+  const { toggle: toggleMessenger } = useMessengerPanel();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(mode === 'create' || mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -199,6 +201,11 @@ export function StaffFormOverlay({ staff, schoolId, onClose, onSave, mode = 'vie
 
   const handleNavClick = (to: string) => (e: React.MouseEvent) => {
     e.preventDefault();
+    if (to === "/messenger") {
+      onClose();
+      toggleMessenger();
+      return;
+    }
     onClose();
     navigate(to);
   };
