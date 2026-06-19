@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Loader2, Plus, Search, History, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getDepartmentsWithDetails, logDepartmentAction, type DepartmentWithDetails } from "@/integrations/supabase/queries/departments";
+import { logDepartmentAction, type DepartmentWithDetails } from "@/integrations/supabase/queries/departments";
+import { useDepartments, useInvalidateRoleManagerSchool } from "@/hooks/useRoleManagerQueries";
 import { DepartmentCreateModal } from "./DepartmentCreateModal";
 import { DepartmentEditModal } from "./DepartmentEditModal";
 import { DepartmentListRow } from "./DepartmentListRow";
@@ -20,8 +21,24 @@ interface DepartmentsTabProps {
 }
 
 export function DepartmentsTab({ schoolId, canEdit, currentUserId, currentUserName }: DepartmentsTabProps) {
-  const [departments, setDepartments] = useState<DepartmentWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 2026-06-19: cache key [schoolId, "departments"] is the single source of
+  // truth shared with Role Manager. Staff tab writes invalidate this key →
+  // MySchool updates instantly (no page refresh).
+  const departmentsQuery = useDepartments(schoolId);
+  const departments = departmentsQuery.data ?? [];
+  const loading = departmentsQuery.isLoading;
+  const fetchData = () => departmentsQuery.refetch();
+
+  // 2026-06-19: MySchool writes (create/edit/delete) also invalidate the
+  // role-manager Staff tab's per-card `useStaffRoles` cache so the Staff
+  // tab updates instantly when a department is mutated from MySchool.
+  // Without this, the Staff tab keeps the old departments array until F5.
+  const invalidateRoleManager = useInvalidateRoleManagerSchool(schoolId);
+  const invalidateAllConsumers = () => {
+    fetchData();
+    invalidateRoleManager({ departments: true, broadStaffRoles: true });
+  };
+
   const [search, setSearch] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -37,18 +54,6 @@ export function DepartmentsTab({ schoolId, canEdit, currentUserId, currentUserNa
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTargetDept, setDeleteTargetDept] = useState<DepartmentWithDetails | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
-
-  useEffect(() => {
-    fetchData();
-  }, [schoolId]);
-
-  const fetchData = async () => {
-    if (!schoolId) return;
-    setLoading(true);
-    const deptData = await getDepartmentsWithDetails(schoolId);
-    setDepartments(deptData);
-    setLoading(false);
-  };
 
   const handleEditDept = (dept: DepartmentWithDetails) => {
     setEditingDept(dept);
@@ -68,10 +73,10 @@ export function DepartmentsTab({ schoolId, canEdit, currentUserId, currentUserNa
 
     setIsSaving(true);
     try {
-      await Promise.all([
-        supabase.from("department_incharges").delete().eq("department_id", deleteTargetDept.id),
-        supabase.from("departments_staff").delete().eq("department_id", deleteTargetDept.id),
-      ]);
+      // 2026-06-19: department_incharges was collapsed into department_staff
+      // (is_incharge boolean). Single delete on department_staff cascades both
+      // membership and incharge designations.
+      await supabase.from("department_staff").delete().eq("department_id", deleteTargetDept.id);
       await supabase.from("departments").delete().eq("id", deleteTargetDept.id);
       await logDepartmentAction({
         schoolId,
@@ -87,7 +92,7 @@ export function DepartmentsTab({ schoolId, canEdit, currentUserId, currentUserNa
       setDeleteConfirmText("");
       setEditingDept(null);
       setEditModalOpen(false);
-      fetchData();
+      invalidateAllConsumers();
       setIsSaving(false);
     } catch (error) {
       toast.error("Failed to delete department");
@@ -247,7 +252,7 @@ export function DepartmentsTab({ schoolId, canEdit, currentUserId, currentUserNa
         currentUserId={currentUserId}
         currentUserName={currentUserName}
         existingNames={departments.map((d) => d.name)}
-        onCreated={fetchData}
+        onCreated={invalidateAllConsumers}
       />
 
       {/* Edit Modal */}
@@ -263,7 +268,7 @@ export function DepartmentsTab({ schoolId, canEdit, currentUserId, currentUserNa
           currentUserId={currentUserId}
           currentUserName={currentUserName}
           existingNames={departments.map((d) => d.name)}
-          onSaved={fetchData}
+          onSaved={invalidateAllConsumers}
           onDeleted={() => handleDeleteClick(editingDept)}
         />
       )}

@@ -12,7 +12,7 @@
 // See docs/ROLE_MANAGER.md §3.1.2(f) and §2026-06-13 Patch for full context.
 
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, Pencil, Save, X, Plus, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Pencil, Save, X, Plus, AlertCircle, ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,20 +22,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { StaffWithDetails } from "@/integrations/supabase/queries/staff";
 import {
-  getStaffAllRoles, updateStaffTag, updateMasterAdmin, updateAdminRole,
-  updateStaffStatus, addCoordinator, removeCoordinator,
-  addClassTeacher, removeClassTeacher, addSubjectTeacher, removeSubjectTeacher,
-  addDepartmentMember, removeDepartmentMember, removeDepartmentIncharge,
-  setHouse, getWingsForSchool, getClassesForSchool, getSectionsForClass,
+  getWingsForSchool, getClassesForSchool, getSectionsForClass,
   getDepartmentsForSchool, getHousesForSchool, getCurrentAcademicYear,
-  getClassTeacherConflict,
+  getClassTeacherConflict, getAutoAssignedWingsForStaff,
   type StaffAllRoles, type WingOption, type ClassOption, type SectionOption,
   type DepartmentOption, type HouseOption,
 } from "@/integrations/supabase/queries/roleAssignments";
+import { useStaffRoles, useSaveStaffRoles } from "@/hooks/useRoleManagerQueries";
 import { SubjectPickerModal } from "./SubjectPickerModal";
 import { MasterAdminConfirmDialog } from "./MasterAdminConfirmDialog";
-import { RoleField } from "./RoleField";
+import { RoleField, deriveRole } from "./RoleField";
 import { CoordinatorMultiSelect } from "./CoordinatorMultiSelect";
+import { SectionGroup } from "./SectionGroup";
 
 interface StaffRoleCardProps {
   staff: StaffWithDetails;
@@ -56,12 +54,19 @@ export function StaffRoleCard({
   const { user } = useAuth();
   const currentUserId = user?.id ?? "";
 
+  // ============== Data (TanStack Query) ==============
+  // Single source of truth for this staff's full role payload. The save
+  // mutation invalidates this key on success, and also invalidates the
+  // staff-list key (parent directory) and every other card's roles for
+  // the same school — so cross-staff class-teacher reassigns update all
+  // visible cards in lockstep. See useRoleManagerQueries.ts.
+  const { data: roles, isLoading: loading } = useStaffRoles(staff.id, schoolId);
+  const saveMutation = useSaveStaffRoles(schoolId);
+  const saving = saveMutation.isPending;
+
   // ============== State ==============
-  const [roles, setRoles] = useState<StaffAllRoles | null>(null);
-  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   // Local draft state for edits
   const [draftTag, setDraftTag] = useState("");
@@ -71,7 +76,7 @@ export function StaffRoleCard({
   const [draftStatus, setDraftStatus] = useState("active");
   const [draftCoordinatorWingIds, setDraftCoordinatorWingIds] = useState<string[]>([]);
   const [draftClassTeachers, setDraftClassTeachers] = useState<Array<{ id: string; classId: string; sectionId: string; className: string; sectionName: string }>>([]);
-  const [draftSubjectTeachers, setDraftSubjectTeachers] = useState<Array<{ id: string; classId: string; sectionId: string; subjectId: string; label: string }>>([]);
+  const [draftSubjectTeachers, setDraftSubjectTeachers] = useState<Array<{ id: string; classId: string; sectionId: string; subjectId: string; className?: string; sectionName?: string; subjectName?: string; label: string }>>([]);
   const [draftDeptMemberIds, setDraftDeptMemberIds] = useState<string[]>([]);
   const [draftDeptInchargeIds, setDraftDeptInchargeIds] = useState<string[]>([]);
   const [draftHouse, setDraftHouse] = useState<string>("");
@@ -82,6 +87,7 @@ export function StaffRoleCard({
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [houses, setHouses] = useState<HouseOption[]>([]);
   const [academicYearId, setAcademicYearId] = useState<string | null>(null);
+  const [autoAssignedWingIds, setAutoAssignedWingIds] = useState<string[]>([]);
 
   // Picker state
   const [ctClassId, setCtClassId] = useState("");
@@ -96,19 +102,15 @@ export function StaffRoleCard({
 
   // ============== Effects ==============
 
-  const loadRoles = async () => {
-    if (!schoolId) return;
-    setLoading(true);
-    try {
-      const data = await getStaffAllRoles(staff.id, schoolId);
-      setRoles(data);
-      seedDraft(data);
-    } finally {
-      setLoading(false);
+  // Re-seed the draft whenever the roles payload changes (initial load,
+  // post-save invalidation, or external change). Only run when not
+  // editing — otherwise the user's in-flight edits would be clobbered.
+  useEffect(() => {
+    if (roles && !editing) {
+      seedDraft(roles);
     }
-  };
-
-  useEffect(() => { loadRoles(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [staff.id, schoolId]);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [roles]);
 
   const seedDraft = (r: StaffAllRoles) => {
     setDraftTag(r.messenger_tag ?? "");
@@ -117,7 +119,7 @@ export function StaffRoleCard({
     setDraftRole(r.role);
     setDraftStatus(r.status);
     // Coordinator (wings) — current data is single, but model as array
-    setDraftCoordinatorWingIds(r.coordinator ? [r.coordinator.wing_id] : []);
+    setDraftCoordinatorWingIds(r.coordinator_wings.map((c) => c.wing_id));
     setDraftClassTeachers(r.class_teachers.map((c) => ({
       id: c.id, classId: c.class_id, sectionId: c.section_id,
       className: c.class_name, sectionName: c.section_name,
@@ -137,7 +139,7 @@ export function StaffRoleCard({
   // Compute dirty state
   const dirty = useMemo(() => {
     if (!roles) return false;
-    const origCoordWingIds = roles.coordinator ? [roles.coordinator.wing_id] : [];
+    const origCoordWingIds = roles.coordinator_wings.map((c) => c.wing_id);
     const origDeptMemberIds = roles.departments.map((d) => d.department_id);
     const origDeptInchargeIds = roles.departments.filter((d) => d.is_incharge).map((d) => d.department_id);
     const sameArr = (a: string[], b: string[]) =>
@@ -173,6 +175,11 @@ export function StaffRoleCard({
       ]);
       setWings(w); setClasses(c); setDepartments(d); setHouses(h); setAcademicYearId(ay);
     }
+    // Load auto-assigned wings to protect them in the dropdown
+    if (schoolId) {
+      const autoWings = await getAutoAssignedWingsForStaff(staff.id, schoolId);
+      setAutoAssignedWingIds(autoWings);
+    }
   };
 
   const cancelEdit = () => {
@@ -183,118 +190,44 @@ export function StaffRoleCard({
   // ============== Save ==============
 
   const save = async () => {
-    if (!roles || !user) return;
-    setSaving(true);
+    if (!roles || !user || !schoolId) {
+      if (!schoolId) {
+        toast.error("School context missing — refresh and retry");
+      }
+      return;
+    }
     try {
-      // 1. Profile fields
-      if ((draftTag || "") !== (roles.messenger_tag || "")) {
-        await updateStaffTag(staff.id, draftTag, currentUserId);
+      await saveMutation.mutateAsync({
+        staffId: staff.id,
+        schoolId,
+        currentUserId,
+        academicYearId,
+        draft: {
+          tag: draftTag,
+          isMasterAdmin: draftIsMasterAdmin,
+          isAdmin: draftIsAdmin,
+          role: draftRole,
+          status: draftStatus,
+          house: draftHouse,
+          coordinatorWingIds: draftCoordinatorWingIds,
+          classTeachers: draftClassTeachers,
+          subjectTeachers: draftSubjectTeachers,
+          deptMemberIds: draftDeptMemberIds,
+          deptInchargeIds: draftDeptInchargeIds,
+        },
+        original: roles,
+      });
+      // Reload auto-assigned wings after save so the dropdown reflects new
+      // CT/ST changes. The roles payload itself is refreshed by the
+      // mutation's onSuccess invalidation.
+      if (schoolId) {
+        const autoWings = await getAutoAssignedWingsForStaff(staff.id, schoolId);
+        setAutoAssignedWingIds(autoWings);
       }
-      if (draftIsMasterAdmin !== roles.is_master_admin) {
-        await updateMasterAdmin(staff.id, draftIsMasterAdmin, currentUserId);
-      }
-      if (draftIsAdmin !== roles.is_admin) {
-        await updateAdminRole(staff.id, draftIsAdmin, currentUserId);
-      }
-      if (draftRole !== roles.role) {
-        await updateStaffRole(staff.id, draftRole, currentUserId);
-      }
-      if (draftStatus !== roles.status) {
-        await updateStaffStatus(staff.id, draftStatus, currentUserId);
-      }
-      if (draftHouse !== (roles.house?.house_name ?? "")) {
-        await setHouse(staff.id, draftHouse, currentUserId);
-      }
-
-      // 2. Coordinator (wings) — multi-wing
-      const origCoordWingIds = roles.coordinator ? [roles.coordinator.wing_id] : [];
-      const newCoordWingIds = draftCoordinatorWingIds;
-      // removed
-      for (const wingId of origCoordWingIds) {
-        if (!newCoordWingIds.includes(wingId)) {
-          // Find the wing_staff row id to delete — roles.coordinator stores it
-          if (roles.coordinator && roles.coordinator.wing_id === wingId) {
-            await removeCoordinator(roles.coordinator.id, staff.id, schoolId, currentUserId);
-          }
-        }
-      }
-      // added
-      for (const wingId of newCoordWingIds) {
-        if (!origCoordWingIds.includes(wingId)) {
-          await addCoordinator(wingId, staff.id, schoolId, currentUserId);
-        }
-      }
-
-      // 3. Class Teachers — diff by (classId, sectionId)
-      const origCTs = new Map(roles.class_teachers.map((c) => [c.id, c]));
-      const newCTsMap = new Map(draftClassTeachers.map((c) => [`${c.classId}:${c.sectionId}`, c]));
-      for (const [id, orig] of origCTs) {
-        const found = draftClassTeachers.find((c) => c.id === id);
-        if (!found) await removeClassTeacher(id, staff.id, schoolId, currentUserId);
-      }
-      for (const dc of draftClassTeachers) {
-        if (dc.id.startsWith("new-")) {
-          await addClassTeacher(staff.id, dc.classId, dc.sectionId, schoolId, currentUserId);
-        }
-      }
-
-      // 4. Subject Teachers
-      const origSTs = new Map(roles.subject_teachers.map((s) => [s.id, s]));
-      for (const [id] of origSTs) {
-        if (!draftSubjectTeachers.find((s) => s.id === id)) {
-          await removeSubjectTeacher(id, staff.id, schoolId, currentUserId);
-        }
-      }
-      for (const ds of draftSubjectTeachers) {
-        if (ds.id.startsWith("new-")) {
-          await addSubjectTeacher(staff.id, ds.classId, ds.sectionId, ds.subjectId, schoolId, academicYearId, currentUserId);
-        }
-      }
-
-      // 5. Departments — split into incharge + member lists, cascade incharge ⇒ member
-      // Enforce: incharge implies member. If the user added a dept to inchargeIds
-      // but forgot to add it to memberIds, we add it on save.
-      const effectiveMemberIds = Array.from(new Set([...draftDeptMemberIds, ...draftDeptInchargeIds]));
-      const origDeptMemberIds = roles.departments.map((d) => d.department_id);
-      const origDeptInchargeIds = roles.departments.filter((d) => d.is_incharge).map((d) => d.department_id);
-      // Map dept_id → role-dept row id (for delete calls)
-      const deptIdToRowId = new Map(roles.departments.map((d) => [d.department_id, d.id]));
-
-      // REMOVED — dept was in memberIds before, not in memberIds now
-      for (const deptId of origDeptMemberIds) {
-        if (!effectiveMemberIds.includes(deptId)) {
-          const rowId = deptIdToRowId.get(deptId);
-          if (rowId) await removeDepartmentMember(rowId, staff.id, schoolId, currentUserId);
-        }
-      }
-      // ADDED — dept is in memberIds now, wasn't before
-      for (const deptId of effectiveMemberIds) {
-        if (!origDeptMemberIds.includes(deptId)) {
-          await addDepartmentMember(staff.id, deptId, schoolId, false, currentUserId);
-        }
-      }
-      // INCHARGE removed — was in inchargeIds, no longer
-      for (const deptId of origDeptInchargeIds) {
-        if (!draftDeptInchargeIds.includes(deptId)) {
-          const rowId = deptIdToRowId.get(deptId);
-          if (rowId) await removeDepartmentIncharge(rowId, staff.id, schoolId, currentUserId);
-        }
-      }
-      // INCHARGE added — in inchargeIds now, wasn't before
-      for (const deptId of draftDeptInchargeIds) {
-        if (!origDeptInchargeIds.includes(deptId)) {
-          await addDepartmentMember(staff.id, deptId, schoolId, true, currentUserId);
-        }
-      }
-
-      await onRefresh();
-      await loadRoles();
       setEditing(false);
       toast.success("Changes saved");
     } catch (e: any) {
       toast.error(`Save failed: ${e?.message ?? "unknown"}`);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -303,21 +236,57 @@ export function StaffRoleCard({
   const initials = staff.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
   const editable = !isOwnCard && canEdit;
 
+  // Live role — when editing, derive from draft state so the pill flips
+  // immediately as the user adds/removes assignments. Per ROLE_MANAGER.md
+  // §3.1.2(c): "Computed every render from current assignments".
+  // Outside edit mode, fall back to the saved-state role.
+  const liveRole = useMemo(() => {
+    if (!roles) return null;
+    if (!editing) return deriveRole(roles);
+    const draftLike = {
+      coordinator_wings: draftCoordinatorWingIds.map((wid) => ({ id: "", wing_id: wid, wing_name: "" })),
+      class_teachers: draftClassTeachers.map((c) => ({
+        id: c.id, class_id: c.classId, section_id: c.sectionId,
+        class_name: c.className, section_name: c.sectionName,
+      })),
+      subject_teachers: draftSubjectTeachers.map((s) => ({
+        id: s.id, class_id: s.classId, section_id: s.sectionId, subject_id: s.subjectId,
+        class_name: "", section_name: "", subject_name: "", label: s.label,
+      })),
+      departments: draftDeptMemberIds.map((id) => {
+        const dept = departments.find((d) => d.id === id);
+        return {
+          id, department_id: id, department_name: dept?.name ?? "",
+          is_incharge: draftDeptInchargeIds.includes(id),
+        };
+      }),
+      house: draftHouse ? { house_name: draftHouse } : null,
+    };
+    return deriveRole(draftLike);
+  }, [roles, editing, draftCoordinatorWingIds, draftClassTeachers, draftSubjectTeachers, draftDeptMemberIds, draftDeptInchargeIds, draftHouse, departments]);
+
   // ============== Render ==============
 
-  if (loading && !roles) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-center h-40">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+  if (!roles) {
+    // First load only — no cached data yet. After the first successful
+    // fetch we keep the previous roles in the render path even while a
+    // background refresh is in flight, so the card never flashes a
+    // spinner on subsequent tab visits. The new data updates in place
+    // when it arrives. Same pattern as Gmail / Notion.
+    if (loading) {
+      return (
+        <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-center h-40">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    return null;
   }
-  if (!roles) return null;
 
   return (
     <>
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        {/* ROW: avatar | name+meta | summary chips | actions */}
+        {/* ===== Section 1: Identity (avatar + name + EMP + mobile + status + badges + tag) ===== */}
         <div className="flex items-center gap-3 p-3">
           {/* Avatar */}
           <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-800 flex items-center justify-center text-sm font-semibold flex-shrink-0">
@@ -325,7 +294,7 @@ export function StaffRoleCard({
           </div>
 
           {/* Name + meta */}
-          <div className="min-w-0 w-48 flex-shrink-0">
+          <div className="min-w-0 flex-1 md:flex-none md:w-56 flex-shrink-0">
             <h3 className="font-semibold text-sm truncate">{staff.full_name}</h3>
             <p className="text-xs text-muted-foreground font-mono truncate">
               {staff.employee_id ?? "—"}
@@ -339,23 +308,8 @@ export function StaffRoleCard({
             </div>
           </div>
 
-          {/* Summary chips — read-only display, shows wings + depts by name */}
-          <div className="flex-1 min-w-0 hidden md:flex flex-wrap items-center gap-1.5 text-xs">
-            <RoleField roles={roles} />
-            {roles.coordinator && <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">👑 {roles.coordinator.wing_name}</span>}
-            {roles.departments.filter((d) => d.is_incharge).map((d) => (
-              <span key={`ic-${d.id}`} className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">👑 {d.department_name}</span>
-            ))}
-            {roles.departments.filter((d) => !d.is_incharge).map((d) => (
-              <span key={`mb-${d.id}`} className="px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">{d.department_name}</span>
-            ))}
-            {roles.class_teachers.length > 0 && <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">CT × {roles.class_teachers.length}</span>}
-            {roles.subject_teachers.length > 0 && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">ST × {roles.subject_teachers.length}</span>}
-            {roles.house?.house_name && <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">🏠 {roles.house.house_name}</span>}
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Actions — Edit + Expand. Edit hidden for own card (self-assign guard). */}
+          <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
             {editable && !editing && (
               <Button size="sm" variant="outline" onClick={enterEdit} title="Edit">
                 <Pencil className="h-3 w-3" />
@@ -371,6 +325,26 @@ export function StaffRoleCard({
             </Button>
           </div>
         </div>
+
+        {/* ===== Section 2: Role (auto-derived pill) ===== */}
+        <div className="px-3 pb-2">
+          <SectionGroup label="Role" accent="muted">
+            <RoleField roles={roles} overrideRole={liveRole ?? undefined} />
+          </SectionGroup>
+        </div>
+
+        {/* ===== Section 3: Academic Profile (coordinator / wings / CT / ST / house) ===== */}
+        <AcademicProfile
+          roles={roles}
+          draftClassTeachers={draftClassTeachers}
+          draftSubjectTeachers={draftSubjectTeachers}
+          classes={classes}
+          wings={wings}
+          editing={editing}
+        />
+
+        {/* ===== Section 4: Non-Academic Profile (incharge + member depts) ===== */}
+        <NonAcademicProfile roles={roles} />
 
         {/* DRAWER: 9 sections, 2-col grid, only visible when editing OR expanded */}
         {(editing || expanded) && (
@@ -433,18 +407,19 @@ export function StaffRoleCard({
             {/* (c) Role — auto-derived, read-only, no override */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-28">Role</span>
-              <RoleField roles={roles} showHint={editing} />
+              <RoleField roles={roles} showHint={editing} overrideRole={liveRole ?? undefined} />
             </div>
 
-            {/* (e) Coordinator (Wing) */}
+            {/* (e) Coordinator (Wing) — manual leadership role */}
             <div className="flex items-start gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground w-28 pt-1.5">Wing</span>
+              <span className="text-xs text-muted-foreground w-28 pt-1.5">Coordinator</span>
               {editing ? (
                 <div className="flex-1 space-y-1.5">
                   <CoordinatorMultiSelect
                     value={draftCoordinatorWingIds}
                     options={wings}
                     onChange={setDraftCoordinatorWingIds}
+                    disabledWings={autoAssignedWingIds}
                   />
                   {draftCoordinatorWingIds.length > 0 && (
                     <div className="flex flex-wrap gap-1">
@@ -467,10 +442,95 @@ export function StaffRoleCard({
                   )}
                 </div>
               ) : (
-                <span className="text-xs flex-1">
-                  {roles.coordinator?.wing_name ?? "—"}
-                </span>
+                <div className="flex flex-wrap items-center gap-1 flex-1">
+                  {roles.coordinator_wings.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    roles.coordinator_wings.map((c) => (
+                      <span
+                        key={c.id}
+                        className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200"
+                      >
+                        👑 {c.wing_name}
+                      </span>
+                    ))
+                  )}
+                </div>
               )}
+            </div>
+
+            {/* (e.5) Wings (auto-assigned from CT/ST) — read-only */}
+            {/* 2026-06-18: live-merge saved auto_assigned_wings with a
+                derived set from draft CT/ST assignments. When the user
+                picks 12th B as Class Teacher, Senior wing appears in this
+                row instantly — no Save needed. Saved-but-not-yet-saved-
+                again CT/ST rows remain covered by roles.auto_assigned_wings
+                (re-fetched on save). */}
+            <div className="flex items-start gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground w-28 pt-1.5">Wings</span>
+              {(() => {
+                const coordWingIds = new Set(
+                  roles.coordinator_wings.map((c) => c.wing_id)
+                );
+
+                // 1. Saved auto wings (post-save truth).
+                const merged = new Map<string, { id: string; name: string; source: "auto" | "manual" }>();
+                for (const w of roles.auto_assigned_wings ?? []) {
+                  if (!coordWingIds.has(w.id)) merged.set(w.id, { ...w, source: "auto" });
+                }
+                // 2. Manual teacher wings (Wings tab "Add Teacher").
+                for (const w of roles.manual_teacher_wings ?? []) {
+                  if (!coordWingIds.has(w.id) && !merged.has(w.id)) {
+                    merged.set(w.id, { ...w, source: "manual" });
+                  }
+                }
+
+                if (editing) {
+                  // 3. Draft-only wings: union wing_ids of draft CT + ST
+                  //    classes that are not already in saved set.
+                  const classWingByClassId = new Map<string, string | null>();
+                  for (const c of classes) classWingByClassId.set(c.id, c.wing_id);
+                  const draftClassIds = new Set<string>([
+                    ...draftClassTeachers.map((c) => c.classId),
+                    ...draftSubjectTeachers.map((s) => s.classId),
+                  ]);
+                  for (const classId of draftClassIds) {
+                    const wingId = classWingByClassId.get(classId);
+                    if (!wingId || coordWingIds.has(wingId)) continue;
+                    if (merged.has(wingId)) continue;
+                    const w = wings.find((x) => x.id === wingId);
+                    if (w) merged.set(wingId, { id: w.id, name: w.name, source: "auto" });
+                  }
+                }
+
+                if (merged.size === 0) {
+                  return <span className="text-xs flex-1 text-muted-foreground">—</span>;
+                }
+                return (
+                  <div className="flex flex-wrap gap-1 flex-1">
+                    {Array.from(merged.values()).map((w) =>
+                      w.source === "manual" ? (
+                        <span
+                          key={w.id}
+                          className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-1"
+                          title="Manual teacher assignment — remove via Wings tab"
+                        >
+                          {w.name}
+                        </span>
+                      ) : (
+                        <span
+                          key={w.id}
+                          className="px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 inline-flex items-center gap-1"
+                          title="Auto-assigned from class teacher / subject teacher — remove via Class Teacher or Subject Teacher"
+                        >
+                          <Lock className="h-3 w-3" />
+                          {w.name}
+                        </span>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* (f) Class Teacher */}
@@ -594,10 +654,8 @@ export function StaffRoleCard({
                       value=""
                       onValueChange={(v) => {
                         if (!v) return;
-                        // adding as member — also remove from incharge if was there (no, demote; actually we want
-                        // member-add to be independent. If user adds to member first, then later to incharge,
-                        // we promote. Cascade: incharge ⇒ member is enforced on save, not here).
-                        setDraftDeptMemberIds(Array.from(new Set([...draftDeptMemberIds, v])));
+                        // Use functional update to avoid closure staleness.
+                        setDraftDeptMemberIds((prev) => Array.from(new Set([...prev, v])));
                       }}
                     >
                       <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="+ Add member" /></SelectTrigger>
@@ -617,9 +675,10 @@ export function StaffRoleCard({
                       value=""
                       onValueChange={(v) => {
                         if (!v) return;
-                        // Adding as incharge also auto-adds to memberIds (cascade in UI for clarity)
-                        setDraftDeptInchargeIds(Array.from(new Set([...draftDeptInchargeIds, v])));
-                        setDraftDeptMemberIds(Array.from(new Set([...draftDeptMemberIds, v])));
+                        // Use functional updates so both setStates see the post-previous-update value.
+                        // Adding as incharge also auto-adds to memberIds (cascade in UI for clarity).
+                        setDraftDeptInchargeIds((prev) => Array.from(new Set([...prev, v])));
+                        setDraftDeptMemberIds((prev) => Array.from(new Set([...prev, v])));
                       }}
                     >
                       <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="+ Add incharge" /></SelectTrigger>
@@ -632,63 +691,74 @@ export function StaffRoleCard({
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Incharge badges */}
-                  {draftDeptInchargeIds.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {draftDeptInchargeIds.map((deptId) => {
-                        const dept = departments.find((d) => d.id === deptId);
-                        return (
-                          <Badge key={`ic-${deptId}`} className="text-xs bg-amber-100 text-amber-800 border border-amber-200">
-                            👑 {dept?.name ?? "?"}
-                            <button
-                              onClick={() => {
-                                // Remove from incharge. Keep as member.
-                                setDraftDeptInchargeIds(draftDeptInchargeIds.filter((x) => x !== deptId));
-                              }}
-                              title="Demote (keep as member)"
-                              className="ml-1"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {/* Member badges (incharge-also-member rows render in incharge group only — crown wins) */}
-                  {draftDeptMemberIds.filter((d) => !draftDeptInchargeIds.includes(d)).length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {draftDeptMemberIds
-                        .filter((d) => !draftDeptInchargeIds.includes(d))
-                        .map((deptId) => {
-                          const dept = departments.find((d) => d.id === deptId);
-                          return (
-                            <Badge key={`mb-${deptId}`} variant="secondary" className="text-xs">
-                              {dept?.name ?? "?"}
-                              <button
-                                onClick={() => {
-                                  // Promote to incharge (also keeps in member — cascade)
-                                  setDraftDeptInchargeIds(Array.from(new Set([...draftDeptInchargeIds, deptId])));
-                                }}
-                                title="Promote to incharge"
-                                className="ml-1 text-amber-700"
-                              >
-                                ↑
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setDraftDeptMemberIds(draftDeptMemberIds.filter((x) => x !== deptId));
-                                }}
-                                title="Remove from department"
-                                className="ml-1"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </Badge>
-                          );
-                        })}
-                    </div>
-                  )}
+                  {/* Department badges — single render, incharge crown wins, no duplicates */}
+                  {(() => {
+                    // Build the effective member set. Incharge implies member, so any
+                    // dept in inchargeIds is also implicitly a member.
+                    const effectiveMemberIds = Array.from(new Set([...draftDeptMemberIds, ...draftDeptInchargeIds]));
+                    // If a dept is in both lists, it renders once as incharge.
+                    // If in incharge only (shouldn't happen, but defensive), render as incharge.
+                    // If in member only, render as member.
+                    const badges: Array<{ id: string; kind: "incharge" | "member" }> = [];
+                    const seen = new Set<string>();
+                    for (const id of draftDeptInchargeIds) {
+                      if (!seen.has(id)) { badges.push({ id, kind: "incharge" }); seen.add(id); }
+                    }
+                    for (const id of effectiveMemberIds) {
+                      if (!seen.has(id)) { badges.push({ id, kind: "member" }); seen.add(id); }
+                    }
+                    if (badges.length === 0) return null;
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {badges.map(({ id, kind }) => {
+                            const dept = departments.find((d) => d.id === id);
+                            if (kind === "incharge") {
+                              return (
+                                <Badge key={`ic-${id}`} className="text-xs bg-amber-100 text-amber-800 border border-amber-200">
+                                  👑 {dept?.name ?? "?"} — Incharge
+                                  <button
+                                    onClick={() => {
+                                      // Demote: remove from incharge, keep as member
+                                      setDraftDeptInchargeIds(draftDeptInchargeIds.filter((x) => x !== id));
+                                    }}
+                                    title="Demote (keep as member)"
+                                    className="ml-1"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge key={`mb-${id}`} variant="secondary" className="text-xs">
+                                {dept?.name ?? "?"} — Member
+                                <button
+                                  onClick={() => {
+                                    // Promote to incharge (use functional update for safety)
+                                    setDraftDeptInchargeIds((prev) => Array.from(new Set([...prev, id])));
+                                  }}
+                                  title="Promote to incharge"
+                                  className="ml-1 text-amber-700"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDraftDeptMemberIds(draftDeptMemberIds.filter((x) => x !== id));
+                                  }}
+                                  title="Remove from department"
+                                  className="ml-1"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <span className="text-xs flex-1">
@@ -733,11 +803,19 @@ export function StaffRoleCard({
       <SubjectPickerModal
         open={subjectPickerOpen}
         schoolId={schoolId}
+        initialDrafts={draftSubjectTeachers}
         onClose={() => setSubjectPickerOpen(false)}
-        onPick={(subjectId, classId, sectionId, subjectName, className, sectionName) => {
-          const cls = classes.find((c) => c.id === classId);
-          const label = `${className} ${sectionName} — ${subjectName}`;
-          setDraftSubjectTeachers([...draftSubjectTeachers, { id: `new-${Date.now()}`, classId, sectionId, subjectId, label }]);
+        onPick={(_subjectId, _classId, _sectionId, _subjectName, _className, _sectionName) => {
+          // No-op: the modal accumulates its own staged list and only the
+          // onDone callback below transfers the final list to the card.
+          // Kept here for forward-compat in case the parent wants to track
+          // intermediate picks.
+        }}
+        onDone={(staged) => {
+          // Replace the card's draft list with the modal's staged list.
+          // Single source of truth — every Done click starts from a clean
+          // view of what's about to be saved on Card Save.
+          setDraftSubjectTeachers(staged);
           setSubjectPickerOpen(false);
         }}
       />
@@ -755,5 +833,188 @@ export function StaffRoleCard({
         />
       )}
     </>
+  );
+}
+
+// ============================================================================
+// AcademicProfile — Section 3 of the collapsed card
+// ============================================================================
+//
+// Surfaces all academic-profile assignments in labeled sub-rows:
+//   - Coordinator wings: 👑 {wing}
+//   - Wings (auto-membership via CT/ST): {wing}
+//   - Class teacher: {ClassName} {SectionName}
+//   - Subject teacher: {ClassName} {SectionName} — {SubjectName}
+//   - House: 🏠 {house}
+//
+// Each sub-row is omitted if empty. The whole block is omitted if ALL
+// sub-rows are empty (so a non-academic-only staff has no "Academic Profile"
+// header at all).
+
+function AcademicProfile({ roles, draftClassTeachers, draftSubjectTeachers, classes, wings, editing }: {
+  roles: StaffAllRoles;
+  draftClassTeachers: Array<{ classId: string }>;
+  draftSubjectTeachers: Array<{ classId: string }>;
+  classes: Array<{ id: string; wing_id: string | null }>;
+  wings: Array<{ id: string; name: string }>;
+  editing: boolean;
+}) {
+  const hasCoordinator = roles.coordinator_wings.length > 0;
+  // Wings via auto-membership: every class-section this staff is CT/ST for
+  // has a wing_id. Dedup against coordinator wings — if a staff is
+  // both coordinator and CT/ST in the same wing, Coordinator wins.
+  // 2026-06-18: live-merge with draft CT/ST classes so wings show up the
+  // moment a class-section is picked, not after Save.
+  // 2026-06-18: also union manual_teacher_wings (Wings tab "Add Teacher")
+  // so Wings tab writes reflect on the Staff card in lockstep.
+  const coordWingIds = new Set(
+    roles.coordinator_wings.map((c) => c.wing_id)
+  );
+  const merged = new Map<string, { id: string; name: string; source: "auto" | "manual" }>();
+  for (const w of roles.auto_assigned_wings ?? []) {
+    if (!coordWingIds.has(w.id)) merged.set(w.id, { ...w, source: "auto" });
+  }
+  for (const w of roles.manual_teacher_wings ?? []) {
+    if (!coordWingIds.has(w.id) && !merged.has(w.id)) {
+      merged.set(w.id, { ...w, source: "manual" });
+    }
+  }
+  if (editing) {
+    const classWingByClassId = new Map<string, string | null>();
+    for (const c of classes) classWingByClassId.set(c.id, c.wing_id);
+    const draftClassIds = new Set<string>([
+      ...draftClassTeachers.map((c) => c.classId),
+      ...draftSubjectTeachers.map((s) => s.classId),
+    ]);
+    for (const classId of draftClassIds) {
+      const wingId = classWingByClassId.get(classId);
+      if (!wingId || coordWingIds.has(wingId)) continue;
+      if (merged.has(wingId)) continue;
+      const w = wings.find((x) => x.id === wingId);
+      if (w) merged.set(wingId, { id: w.id, name: w.name, source: "auto" });
+    }
+  }
+  const autoWings = Array.from(merged.values());
+  const hasWings = autoWings.length > 0;
+  const hasCT = roles.class_teachers.length > 0;
+  const hasST = roles.subject_teachers.length > 0;
+  const hasHouse = !!roles.house?.house_name;
+
+  if (!hasCoordinator && !hasWings && !hasCT && !hasST && !hasHouse) {
+    return null;
+  }
+
+  return (
+    <div className="px-3 pb-2">
+      <SectionGroup label="Academic Profile" accent="blue">
+        <div className="space-y-1.5 text-xs">
+          {hasCoordinator && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground w-24 flex-shrink-0">Coordinator</span>
+              {roles.coordinator_wings.map((c) => (
+                <span key={c.id} className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">👑 {c.wing_name}</span>
+              ))}
+            </div>
+          )}
+          {hasWings && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground w-24 flex-shrink-0">Wings</span>
+              {autoWings.map((w) =>
+                w.source === "manual" ? (
+                  <span
+                    key={w.id}
+                    className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200"
+                    title="Manual teacher assignment — remove via Wings tab"
+                  >
+                    {w.name}
+                  </span>
+                ) : (
+                  <span
+                    key={w.id}
+                    className="px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 inline-flex items-center gap-1"
+                    title="Auto-assigned from class teacher / subject teacher"
+                  >
+                    <Lock className="h-3 w-3" />
+                    {w.name}
+                  </span>
+                )
+              )}
+            </div>
+          )}
+          {hasCT && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground w-24 flex-shrink-0">Class teacher</span>
+              {roles.class_teachers.map((c) => (
+                <span key={c.id} className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                  {c.class_name} {c.section_name}
+                </span>
+              ))}
+            </div>
+          )}
+          {hasST && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground w-24 flex-shrink-0">Subject teacher</span>
+              {roles.subject_teachers.map((s) => (
+                <span key={s.id} className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {s.class_name} {s.section_name} — {s.subject_name}
+                </span>
+              ))}
+            </div>
+          )}
+          {hasHouse && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground w-24 flex-shrink-0">House</span>
+              <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">🏠 {roles.house!.house_name}</span>
+            </div>
+          )}
+        </div>
+      </SectionGroup>
+    </div>
+  );
+}
+
+// ============================================================================
+// NonAcademicProfile — Section 4 of the collapsed card
+// ============================================================================
+//
+// Single sub-row with both incharge and member dept chips, deduped by
+// department_id so an incharge-also-member renders once as a crowned chip.
+// Omitted entirely if the staff has no dept assignments.
+
+function NonAcademicProfile({ roles }: { roles: StaffAllRoles }) {
+  if (roles.departments.length === 0) return null;
+
+  // Dedup by department_id; incharge wins
+  const seen = new Set<string>();
+  const chips: Array<{ key: string; kind: "incharge" | "member"; name: string }> = [];
+  for (const d of roles.departments.filter((x) => x.is_incharge)) {
+    if (seen.has(d.department_id)) continue;
+    seen.add(d.department_id);
+    chips.push({ key: d.department_id, kind: "incharge", name: d.department_name });
+  }
+  for (const d of roles.departments.filter((x) => !x.is_incharge)) {
+    if (seen.has(d.department_id)) continue;
+    seen.add(d.department_id);
+    chips.push({ key: d.department_id, kind: "member", name: d.department_name });
+  }
+
+  return (
+    <div className="px-3 pb-3">
+      <SectionGroup label="Non-Academic Profile" accent="amber">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {chips.map((c) =>
+            c.kind === "incharge" ? (
+              <span key={`ic-${c.key}`} className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                👑 {c.name} — Incharge
+              </span>
+            ) : (
+              <span key={`mb-${c.key}`} className="px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                {c.name} — Member
+              </span>
+            )
+          )}
+        </div>
+      </SectionGroup>
+    </div>
   );
 }

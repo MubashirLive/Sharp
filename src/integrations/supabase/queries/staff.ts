@@ -563,13 +563,13 @@ export async function canDeactivateStaff(profileId: string, schoolId: string): P
     }
   }
 
-  // Check if Department Incharge
+  // Check if Department Incharge (2026-06-19: now a flag on department_staff).
   const { data: deptIncharge } = await supabase
-    .from("department_incharges")
+    .from("department_staff")
     .select("department_id")
     .eq("staff_profile_id", profileId)
     .eq("school_id", schoolId)
-    .eq("is_active", true)
+    .eq("is_incharge", true)
     .limit(1);
 
   if (deptIncharge?.length) {

@@ -1,457 +1,211 @@
 # SHARP — Screen Flow Map (MVP)
 
-> Last updated: May 2026
-> **MVP Scope:** Login → Onboarding → Messenger → Homework → Attendance → Student Management
-> [S] Screen | [A] Action | [C] Condition | [→] Leads to | [!] Critical rule
+> Updated 2026-06-17. All MVP modules built: Auth, Onboarding, Messenger, **Homework**, **Attendance**, **Calendar**, Student Management, Role Manager.
+> [S] Screen | [A] Action | [C] Condition | [→] Leads to | [!] Rule
 
----
-
-## FLOW 1 — SUPER ADMIN
-
+## Flow 1 — Super Admin
 ```
-[S] Super Admin Login (separate URL)
-    ├── [A] Enter email + password
-    ├── [C] 2FA enabled? → Enter OTP
-    └── [→] Super Admin Dashboard
-            ├── [S] All Schools List — activate / deactivate / delete / view (read only)
-            ├── [S] Create Principal ID
-            │       ├── [A] Fill school basics + Principal credentials
-            │       └── [→] System generates ID + sends credentials via email + SMS
-            └── [S] Billing & Subscriptions
-
-[!] Super Admin cannot enter any school's modules or view any school data.
+[S] Super Admin Login (`/auth/superadmin`)
+  ├── [A] email + password
+  ├── [C] 2FA? → OTP
+  └── [→] Dashboard
+        ├── [S] Schools list (activate/deactivate/delete/view 👁)
+        ├── [S] Create Principal ID (school basics + creds)
+        └── [S] Billing (Phase 2)
+[!] Cannot enter any school module or view school data.
 ```
 
----
-
-## FLOW 2 — PRINCIPAL
-
-### 2A — First Login
+## Flow 2 — Principal
+### 2A First Login
 ```
-[S] Principal Login
-    ├── [A] Enter email + temporary password
-    ├── [C] 2FA enabled? → Enter OTP
-    ├── [→] Forced PIN Setup — enter + confirm 6-digit PIN [!] cannot skip
-    └── [C] Onboarding complete? → Principal Dashboard | No → Onboarding (2B)
+[S] Principal Login → email + temp password → 2FA? OTP
+  → [→] Forced PIN Setup [!] no skip
+  → [C] onboarding_complete? → Dashboard | No → Onboarding (2B)
 ```
 
-### 2B — School Onboarding (one-time wizard)
+### 2B Onboarding — see docs/ONBOARDING.md
+Wizard: School → Structure (Classes + Sessions) → Subjects → Review.
 
-Full spec: docs/ONBOARDING.md
-
-### 2C — Daily Login
+### 2C Daily Login
 ```
-[S] Principal Login
-    ├── [A] Enter email (pre-filled) + 6-digit PIN
-    ├── [C] Session expired / new device? → OTP → PIN
-    └── [→] Principal Dashboard
+[S] Principal Login → email (pre-filled) + PIN
+  → [C] session expired / new device? → OTP → PIN
+  → [→] Dashboard
 ```
 
-### 2D — Principal Dashboard
-```
-[S] Principal Dashboard (dynamic cards)
-    ├── School overview (attendance %, active users), pending alerts, quick actions
-    └── [→] Messenger | Homework | Attendance | Calendar | Staff Management | Student Management | Roles & Permissions | Settings
-```
+### 2D Dashboard
+Dynamic cards: school overview (attendance %, active users), pending alerts, quick actions.
+[→] Messenger | Homework | Attendance | Calendar | Students | My Staff | Role Manager | Settings
 
----
-
-## FLOW 3 — STAFF (Admin / Master Admin / Teacher / Non-Teaching)
-
-### 3A — First Login
+## Flow 3 — Staff (Admin / Master Admin / Teacher / Non-Teaching)
+### 3A First Login
 ```
 [S] Staff Login
-    ├── [C] First time? → School Selection: State → City → School (saved to local storage) → white-label branding shown
-    ├── [A] Enter email + password
-    ├── [C] Wrong OTP 3 times? → Locked → Contact Principal/Admin
-    ├── [→] Forced PIN Setup [!] cannot skip
-    └── [→] Staff Dashboard
+  → [C] first time? → School Selection (State → City → School, local save) → white-label
+  → [A] email + password
+  → [C] 3 wrong OTP? → locked → contact Principal/Admin
+  → [→] Forced PIN [!] no skip
+  → [→] Dashboard
 ```
 
-### 3B — Daily Login
-```
-[S] Staff Login
-    ├── School auto-detected, logo + school name shown (white-label)
-    ├── [A] Enter 6-digit PIN
-    ├── [C] Session expired / new device? → OTP → PIN
-    └── [→] Staff Dashboard (dynamically rendered per role)
-```
+### 3B Daily Login
+School auto-detected, white-label, PIN only. OTP on expiry/new device. → Dashboard.
 
-### 3C — Forgot PIN
-```
-[S] Forgot PIN
-    ├── [A] Enter registered mobile → OTP → new 6-digit PIN
-    ├── [C] Mobile changed? → "Contact your Admin or Principal"
-    └── [!] Teachers cannot update own mobile. Only Principal or Admin can.
-```
+### 3C Forgot PIN
+Registered mobile → OTP → new PIN. Mobile changed → "Contact your Admin or Principal". [!] Teachers cannot change own mobile.
 
-### 3D — Staff Dashboard (per role)
-```
-Admin / Master Admin  → school overview, student/staff management, attendance summary, homework overview, Calendar (full access)
-Class Teacher         → quick attendance mark, pending homework reviews, my class, messenger, Calendar (read + create own class events)
-Subject Teacher       → assigned subjects, homework assigned, messenger, Calendar (read-only)
-Non-Teaching          → role-specific cards (transport, fees, etc.) + messenger, Calendar (read-only)
-All Staff             → Messenger, My Profile, Notifications, Calendar
-```
+### 3D Dashboard (per role)
+- Admin / Master Admin: school overview, students/staff, attendance summary, homework overview, Calendar (full).
+- Class Teacher: quick attendance mark, pending homework reviews, my class, messenger, Calendar (read + create own class events).
+- Subject Teacher: assigned subjects, homework assigned, messenger, Calendar (read).
+- Non-Teaching: role cards (transport/fees) + messenger + Calendar (read).
+- All staff: Messenger, Profile, Notifications, Calendar.
 
----
-
-## FLOW 4 — STUDENT / PARENT
-
-### 4A — First Login
+## Flow 4 — Student / Parent
+### 4A First Login
 ```
 [S] Student Login (mobile only)
-    ├── [C] First time? → School Selection: State → City → School (saved to local storage) → white-label branding shown
-    ├── [A] Enter Student ID or mobile → OTP
-    ├── [C] Wrong OTP 3 times? → Locked → Contact school Admin
-    ├── [→] Forced PIN Setup [!] cannot skip
-    └── [→] Student Dashboard
+  → [C] first time? → School Selection → white-label
+  → [A] Student ID or mobile → OTP
+  → [C] 3 wrong OTP? → locked → school Admin
+  → [→] Forced PIN [!] no skip
+  → [→] Dashboard
 ```
 
-### 4B — Daily Login
+### 4B Daily Login
+School auto-detected, white-label, PIN. OTP on expiry/new device. → Dashboard.
+[!] One account per enrollment, no parent login.
+
+### 4C Dashboard
+Today's attendance, pending homework, recent broadcasts. [→] Messenger | Homework | Attendance | Calendar.
+
+## Flow 5 — Messenger
 ```
-[S] Student Login
-    ├── School auto-detected, logo + school name shown (white-label)
-    ├── [A] Enter 6-digit PIN
-    ├── [C] Session expired / new device? → OTP → PIN
-    └── [→] Student Dashboard
-
-[!] One account per enrollment. No distinction between student and parent.
-```
-
-### 4C — Student Dashboard
-```
-[S] Student Dashboard
-    ├── Today's attendance status
-    ├── Pending homework (count + due dates)
-    ├── Recent notices / broadcasts
-    └── [→] Messenger | Homework | Attendance | Calendar
-```
-
----
-
-## FLOW 5 — MESSENGER
-
-```
-[S] Chat List
-    ├── Individual chats, group chats, broadcast channels
-    └── [A] Search by name or subject
-
-[S] Individual Chat
-    ├── [A] Send text / attach image (max 2MB) / attach PDF
-    ├── [A] Delete own message within 2 minutes only
-    ├── Status: Sent → Delivered → Read
-    └── [!] After 2 minutes, messages are permanent
-
-[S] Group Chat
-    ├── Formed by Teacher or Admin — not students
-    └── Students can send in teacher-formed groups only
-
-[S] Broadcast Channel
-    ├── One-way: school → students
-    └── Student reply → private thread (student + broadcast admin only)
+[S] Chat List (search by name/subject)
+  → Individual | Group | Broadcast
+[S] Individual Chat → text / image ≤2MB / PDF
+  → Delete own ≤2 min only
+  → Status Sent → Delivered → Read
+  [!] After 2 min = permanent
+[S] Group Chat → teacher/admin-formed; students send only
+[S] Broadcast → one-way school→students; student reply = private thread
 ```
 
----
-
-## FLOW 6 — HOMEWORK
-
+## Flow 6 — Homework
 ```
 TEACHER:
-
-[S] Homework List — filter by class / subject / date / status
-    └── [→] Create Homework
-            ├── Select class, section, subject
-            ├── Write instructions + optional attachment (PDF/image)
-            ├── Set due date → Assign → push notification to students
-            └── [→] Submission Inbox
-                    ├── Student list: submitted / pending / late
-                    ├── [→] View submission → add marks + comment → Mark checked
-                    │       [!] Once checked, cannot uncheck without Admin override
-                    └── Class completion report
+[S] List — filter class/subject/date/status
+  → Create (class/section/subject + instructions + attachment + due date)
+  → Push notification to students
+  → Submission Inbox (submitted/pending/late) → View → marks + comment → Mark checked
+    [!] Once checked = locked without Admin override
+  → Class completion report
 
 STUDENT:
-
-[S] Homework List — tabs: Pending | Submitted | Late
-    └── [→] Homework Detail
-            ├── View instructions + attachment
-            ├── [A] Upload photo / type answer / mark as "done on paper"
-            ├── [C] After due date? → marked Late automatically
-            └── [!] Cannot edit after teacher has reviewed
+[S] List — tabs Pending | Submitted | Late
+  → Detail → view + (upload photo / type / "done on paper")
+  → After due date = auto Late
+  [!] Locked after teacher review
 ```
 
----
-
-## FLOW 7 — ATTENDANCE
-
+## Flow 7 — Attendance
 ```
 TEACHER (Class Teacher):
-
-[S] Attendance Screen
-    ├── Today's class shown by default
-    ├── [A] Mark each student: Present / Absent / Leave → Submit
-    ├── [C] Edit within 24hrs? → Allowed with reason note
-    ├── [C] Edit after 24hrs? → Admin override required
-    └── [C] 3 consecutive absences? → Auto alert to Student + Admin
+[S] Attendance — today's class
+  → Mark each: Present / Absent / Leave → Submit
+  → Edit ≤24h with reason
+  → Edit >24h needs Admin override
+  → 3 consecutive absent → auto alert Student + Admin
 
 STUDENT:
-
-[S] My Attendance
-    ├── Monthly calendar (Green = Present, Red = Absent, Yellow = Leave)
-    ├── Attendance % — current month + academic year
-    └── [C] Below 75%? → Warning flag shown
+[S] My Attendance — monthly calendar (G=Present, R=Absent, Y=Leave)
+  → % (current month + year)
+  → <75% = warning flag
 
 ADMIN:
-
-[S] Attendance Dashboard
-    ├── Class-wise summary (today)
-    ├── Low attendance + consecutive absence alerts
-    └── [A] Export report (PDF or Excel)
+[S] Dashboard — class summary (today), low-attendance + consecutive alerts
+  → Export PDF/Excel
 ```
 
----
-
-## FLOW 7B — CALENDAR
-
+## Flow 7B — Calendar
 ```
-PRINCIPAL:
+PRINCIPAL: full read/write on 7 event types.
+  → Declare Holiday (scope: all/students/staff/wing/class/individual)
+  → Schedule Meeting (invite staff)
+  → Assign Task (deadline + assignees)
+  → Announce Event (school or class)
+  → Working Override (mark holiday as working)
+  → Historical view (click past date)
+  → Notifications: immediate on save, or scheduled
 
-[S] Calendar View (command center)
-    ├── Full read + write on all event types
-    ├── [→] Declare Holiday — scope: all / students / staff / wing / class / individual
-    ├── [→] Schedule Meeting — invite staff members
-    ├── [→] Assign Task — deadline + assignee(s)
-    ├── [→] Announce Event — school-wide or class-scoped
-    ├── [→] Working Override — mark a holiday as a working day
-    ├── Historical view — click any past date to see events declared
-    └── [→] Notifications — sent immediately on save (or scheduled for future)
+TEACHER: read school events, create class events for own class, task checklist sidebar.
 
-TEACHER:
+STUDENT: read-only events calendar.
 
-[S] Calendar View (my work)
-    ├── Read-only on all school events
-    ├── [→] Create Class Event — for own class only
-    ├── Task checklist sidebar — deadline tasks, mark done with checkbox
-    └── [A] Click any date → see events for that date
+Event types: holiday | working_override | school_event | class_event | staff_meeting | staff_task | exam_timetable
+Scope: all | students | staff | wing | class | individual
 
-STUDENT:
+Attendance gate (runs before Attendance screen):
+  1. Today in class session start/end?
+  2. Today in school's working week?
+  3. Holiday for today applies to this class?
+  → Any fail → "No school today — [reason]" — locked.
 
-[S] Calendar View (my school life)
-    ├── Read-only — school events + class events + holidays
-    └── [A] Click any date → see events for that date
-
-EVENT TYPES:
-  holiday             → blocks attendance marking for affected group
-  working_override    → non-working day declared as working
-  school_event        → Annual Function, Sports Day, PTM
-  class_event         → class-specific activity (teacher creates own class only)
-  staff_meeting       → invite selected staff, notification on creation
-  staff_task          → deadline + assignee, marked done by assignee
-  exam_timetable      → announcement only
-
-SCOPE RULES:
-  all        → entire school
-  students   → students off, teachers still report
-  staff      → students off, staff work (half-day fraction stored)
-  wing       → e.g. Junior wing off, Senior wing working
-  class      → specific class(es)
-  individual → specific staff member(s)
-
-ATTENDANCE GATE (runs before Attendance screen renders):
-  1. Is today within this class's session start/end dates?
-  2. Is today a working day in this school's defined working week?
-  3. Is there a holiday event for today that applies to this class?
-  → Any check fails → "No school today — [reason]" — attendance locked.
-
-[!] Holidays are declared for future dates only. Past dates are immutable.
-
----
-
-## FLOW 8 — STUDENT MANAGEMENT (Admin / Master Admin / Principal)
-
-### 8A — My Students Dashboard
-```
-[S] My Students Dashboard
-    ├── Stat cards: Total students | Active | Inactive/Suspended | Classes count
-    ├── Toolbar
-    │       ├── Search — by name, Student ID, Student App ID
-    │       ├── Filter — Class | Section | Status
-    │       ├── Sort — Name A→Z | Name Z→A | Class | Roll No. | Admission date
-    │       ├── Bulk Import — download 14-col template CSV, drag-drop upload,
-    │       │   all-or-nothing validation, error report on rejection
-    │       └── Export .xlsx — column picker with sequence control
-    ├── Student table
-    │       Columns: Photo/Initials | Name + Student App ID | Class & Section |
-    │                Father details | Joined date | Status | Completion bar | Actions
-    │       Profile completion bar per row (40/40/20) — colored: blue (80%+) / green (100%)
-    │       [A] Click student name → Student Profile (8B)
-    └── [A] New Student → 3-Stage Wizard Dialog (8C)
-
-[!] House, Stream, and Wing are NOT assigned during creation.
-    They are assigned post-creation via Academic Assignment (8D).
+[!] Holidays = future dates only. Past = immutable.
 ```
 
-### 8B — Student Profile (view-only)
-```
-[S] Student Profile — full page, navigated from dashboard
-    ├── Breadcrumb: My Students Dashboard → [Student Name]
-    ├── Header: photo, full name, Student App ID, class & section,
-    │           status badge, profile completion bar (40/40/20)
-    ├── Stage progress summary (which stages complete, which partial/empty)
-    ├── Info cards (read-only, organized by stage):
-    │       ├── Stage 1: Student identity, contact details, academic placement,
-    │       │            login mobile (masked), social profile
-    │       ├── Stage 2: Photo, blood group, address, parent extended info,
-    │       │            transfer details (if applicable), siblings, transport,
-    │       │            documents received checklist (7 items, received/not)
-    │       ├── Stage 3: Govt IDs (Aadhar/SSSM/Family), disability, health,
-    │       │            minority details (if applicable), UDISE welfare flags, bank
-    │       ├── Academic assignment (house, stream, wing — or "Not yet assigned")
-    │       └── Account & login (login mobile masked, account status)
-    ├── [A] Edit → 3-Stage Wizard (8C, pre-filled, all stages accessible)
-    ├── [A] Academic Assignment → 8D
-    └── [A] Delete → confirmation dialog → removes student record
+## Flow 8 — Student Management
+### 8A My Students Dashboard
+Stat cards: Total | Active | Inactive | Classes. Toolbar: Search (name/ID/App ID), Filter (class/section/status), Sort (name/class/roll/date), Bulk Import (14-col CSV, all-or-nothing), Export .xlsx (column picker + sequence).
 
-[!] Login Mobile shown masked (e.g. 98*****210). Full number visible only to Principal and Master Admin.
-```
+Table: Photo/Initials | Name+App ID | Class&Section | Father | Joined | Status | Completion bar | Actions. Profile bar = blue (80%+) / green (100%).
 
-### 8C — Student Creation / Edit Modal (3-Stage Wizard)
-```
-[S] Student Modal — creation (blank) or edit (pre-filled)
-    Opens as large Dialog with Stage tabs at top + profile completion bar.
-    Profile completion bar (Stage 1=40%, Stage 2=40%, Stage 3=20%) shown at top of dialog.
-    Stages: [Stage 1: Account Creation] [Stage 2: Operational Profile] [Stage 3: Full Record]
+[A] New Student → 3-Stage Wizard (8C). [A] Click name → Profile (8B).
 
-    ┌─ STAGE 1 — ACCOUNT CREATION ─────────────────────────────────────────────┐
-    │ Tab 1A: Student Identity                                                  │
-    │         Student App ID — auto-generated, read-only                        │
-    │         Student ID No., First Name, Middle Name, Last Name               │
-    │         Gender, Date of Birth                                            │
-    │                                                                          │
-    │ Tab 1B: Contact Details                                                   │
-    │         Father: Full Name, Mobile (+ WhatsApp checkbox)                   │
-    │         Mother: Full Name, Mobile (+ WhatsApp checkbox)                   │
-    │         Emergency: Name, Number, Relation                                 │
-    │         "Same as Father's Mobile" checkbox → copies father's number      │
-    │         Emergency WhatsApp checkbox, Parent/Guardian Email               │
-    │                                                                          │
-    │ Tab 1C: Academic Placement                                               │
-    │         Class (from Session Form), Section, Roll Number                   │
-    │         Admission Date (auto-fills today, editable)                       │
-    │                                                                          │
-    │ Tab 1D: Login Setup                                                      │
-    │         Login Mobile (OTP)                                               │
-    │         "Use Father's Mobile" button → auto-fills from father field       │
-    │         Account Status: Active / Inactive                                │
-    │                                                                          │
-    │ Tab 1E: Social Profile                                                   │
-    │         Category (General/SC/ST/OBC/Subcaste)                             │
-    │         [C] Category=Subcaste → Subcaste text field                      │
-    │         Religion / Belief dropdown                                       │
-    │         [C] Religion=Other → religionSpecify text field                  │
-    │         Nationality (default: Indian), Mother Tongue,                    │
-    │         Medium of Instruction, Minority toggle, Only Child toggle        │
-    └──────────────────────────────────────────────────────────────────────────┘
+[!] House/Stream/Wing NOT in creation — assigned post-creation (8D).
 
-    ┌─ STAGE 2 — OPERATIONAL PROFILE (complete within first week) ────────────┐
-    │ Tab 2A: Photo & Blood Group                                             │
-    │         Photo upload (max 500KB PNG/JPG) — upload/preview/remove pattern │
-    │         Blood Group dropdown (A+/A-/B+/B-/AB+/AB-/O+/O-)                  │
-    │                                                                          │
-    │ Tab 2B: Address                                                         │
-    │         Local Address (required), Permanent Address (if different)       │
-    │                                                                          │
-    │ Tab 2C: Parent / Guardian Extended                                       │
-    │         Father: Qualification, Occupation, Photo upload                  │
-    │         Mother: Qualification, Occupation, Photo upload                  │
-    │                                                                          │
-    │ Tab 2D: Transfer Details                                                 │
-    │         [C] Previous School Name filled → section expands:              │
-    │           Board, Last Exam Class/Year/Result/Percentage,                │
-    │           School Leaving Certificate upload                              │
-    │                                                                          │
-    │ Tab 2E: Siblings                                                         │
-    │         "+ Add Sibling" button — max 3 rows, each row individually       │
-    │         removable. Fields: Sibling Full Name, Class, School             │
-    │                                                                          │
-    │ Tab 2F: Transport                                                        │
-    │         "Opted for Transport" toggle                                     │
-    │         [C] Opted=Yes → Bus Route + Bus Stop fields appear              │
-    │                                                                          │
-    │ Tab 2G: Documents Received (7-row checklist)                             │
-    │         Each row: Received toggle (Yes/No) + Upload button              │
-    │         Birth Cert | Student Photo | Caste Cert | Marksheet |           │
-    │         School Leaving Cert | Father's Photo | Mother's Photo           │
-    │         Every uploaded doc has: thumbnail preview + remove + download   │
-    └──────────────────────────────────────────────────────────────────────────┘
+### 8B Student Profile
+Breadcrumb. Header: photo, name, App ID, class&section, status, completion bar. Stage summary. Info cards (read-only) by stage. Academic assignment. Account & login (masked). Actions: Edit, Academic Assignment, Delete.
 
-    ┌─ STAGE 3 — FULL RECORD (compliance / UDISE — no operational dep) ──────┐
-    │ Tab 3A: Government IDs                                                   │
-    │         Aadhar No. (12 digits, no upload — enter 999999999999 if        │
-    │         unavailable per UDISE requirement)                               │
-    │         [C] school_state=MP → SSSM ID (with card upload), Family ID    │
-    │                                                                          │
-    │ Tab 3B: Disability                                                       │
-    │         Type: None / Locomotor / Visual / Hearing / Other               │
-    │         [C] Type=Other → Disability Specification text field           │
-    │         [C] Type not None → Disability Certificate upload              │
-    │                                                                          │
-    │ Tab 3C: Health (UDISE child health reporting)                           │
-    │         Height (cm), Weight (kg)                                         │
-    │                                                                          │
-    │ Tab 3D: Minority Details                                                │
-    │         [C] Minority=Yes (set in Stage 1) → section appears:            │
-    │           Certificate Received toggle, Certificate upload               │
-    │                                                                          │
-    │ Tab 3E: UDISE Welfare Flags                                             │
-    │         Free Textbooks | Midday Meal | Scholarship | Free Uniforms      │
-    │         (each: Yes/No toggle)                                            │
-    │         [C] Receives Scholarship=Yes → Scholarship Name field          │
-    │                                                                          │
-    │ Tab 3F: Bank Details                                                     │
-    │         Student Bank A/C No., Bank Name, Bank Branch,                   │
-    │         Bank Passbook upload                                             │
-    └──────────────────────────────────────────────────────────────────────────┘
+[!] Login Mobile masked (e.g. 98*****210). Full visible only to Principal + Master Admin.
 
-    Profile Completion Bar (on every student card + profile page header):
-    - Stage 1 = 40% → all required Stage 1 fields filled
-    - Stage 2 = 40% → Photo + Local Address + all 7 document checklist items done
-    - Stage 3 = 20% → Aadhar + Disability Type + Height + Weight + Welfare Flags
+### 8C 3-Stage Wizard
+Large Dialog with stage tabs + completion bar.
 
-    [A] Stage 1 "Save & Continue" → validates Stage 1 → moves to Stage 2
-    [A] Stage 2 "Save & Continue" → moves to Stage 3
-    [A] Stage 3 "Create Student" / "Save Changes" → validates all → saves
-    [A] Back button on each stage tab → navigates to previous stage
+**Stage 1 — Account Creation (40%):**
+- 1A Identity: App ID (auto, read-only), Student ID No, First/Middle/Last, Gender, DOB.
+- 1B Contact: Father name+mobile (+ WhatsApp), Mother name+mobile (+ WhatsApp), Emergency name/number/relation, "Same as Father's Mobile" checkbox, emergency WhatsApp, Parent email.
+- 1C Academic: Class (from Session), Section, Roll No, Admission Date (auto today, editable).
+- 1D Login Setup: Login Mobile (OTP), "Use Father's Mobile" button, Status Active/Inactive.
+- 1E Social: Category (General/SC/ST/OBC/Subcaste → subcaste text), Religion/Belief (Other → specify), Nationality (Indian default), Mother Tongue, Medium, Minority toggle, Only Child toggle.
 
-    [A] Create → generates Student App ID → student appears in dashboard at 40%
-    [A] Edit → all 3 stages accessible, completion bar updates live
+**Stage 2 — Operational Profile (40%):**
+- 2A Photo & Blood Group: photo ≤500KB PNG/JPG, blood group.
+- 2B Address: local (req), permanent.
+- 2C Parent Extended: father/mother qualification, occupation, photo.
+- 2D Transfer: previous school → board, last exam, leaving cert.
+- 2E Siblings: +Add Sibling (max 3): name, class, school.
+- 2F Transport: opted toggle → bus route + stop.
+- 2G Documents (7 checklist): birth cert, student photo, caste cert, marksheet, leaving cert, father photo, mother photo. Each: received toggle + upload.
 
-[!] Login Mobile editable only by Principal, Master Admin, Admin. Not by student.
-[!] Bulk import: template = 14-column CSV. All-or-nothing. Error file with
-    error_reason column + summary sheet on rejection. Intra-file duplicate
-    login_mobile = warning (not hard error).
-```
+**Stage 3 — Full Record (20%):**
+- 3A Govt IDs: Aadhar (12 digits, 999999999999 if unavailable), MP → SSSM ID + card upload + Family ID.
+- 3B Disability: type (None/Locomotor/Visual/Hearing/Other → spec) → cert upload.
+- 3C Health: height (cm), weight (kg).
+- 3D Minority: cert received toggle + upload.
+- 3E UDISE Welfare: free textbooks, midday meal, scholarship, free uniforms (Y/N) → scholarship name.
+- 3F Bank: A/C, name, branch, passbook upload.
 
-### 8D — Academic Assignment (post-creation)
-```
-[S] Academic Assignment — accessed from Student Profile
-    ├── House — dropdown (from Additional Info Form)
-    ├── Stream — dropdown (from Session Form, filtered by class)
-    └── Wing — dropdown (from Session Form, if configured)
+Completion: Stage 1 = 40%, Stage 2 = 40% (photo + local address + 7 docs), Stage 3 = 20% (aadhar + disability + height + weight + welfare).
 
-    [A] Save → updates student record → reflected in Student Profile
+[A] Stage "Save & Continue" validates + moves. [A] "Create Student" / "Save Changes" on Stage 3.
 
-[!] This screen is separate from the creation form by design.
-    Assignment can be done at any time after the student record exists.
-```
+[!] Login Mobile: Principal/Master Admin/Admin only. Bulk import: 14-col CSV, all-or-nothing, intra-file duplicate login_mobile = warning only.
 
-### 8E — Export (.xlsx)
-```
-[S] Export Modal — triggered from My Students Dashboard toolbar
-    ├── Column picker — toggle which columns to include
-    ├── Sequence control — drag to reorder column output
-    ├── Default columns: Student App ID, Full Name (2 columns checked by default)
-    └── [A] Download → generates .xlsx with selected columns for currently filtered student list
+### 8D Academic Assignment
+Post-create. House (from Additional Info), Stream (from Session, filtered by class), Wing (from Session, if configured). Save → reflected in Profile.
 
-[!] Export respects active filters — exports only what is visible in the current table view.
-```
+[!] Separate from creation by design.
+
+### 8E Export
+Column picker (toggle), sequence (drag-reorder). Default: App ID, Full Name (2 cols checked). Download .xlsx for current filter.

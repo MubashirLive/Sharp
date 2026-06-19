@@ -1,410 +1,230 @@
-# SECTION — STUDENT FORM 
+# Student Form
+
+> **Status:** In progress. 2 of 10 tabs implemented (`Tab1Identity`, `Tab3PersonalProfile`). Container at `src/components/student/StudentFormDialog.tsx` defines all 10 tabs and tab-completion lock logic; tabs 2, 4–10 stub-rendered.
+> See `docs/STUDENT_FORM.md` for original spec; this doc tracks current state.
 
 ---
 
-## Overview
+## Spec (10-tab wizard)
 
-Student profile creation split into 10 tabs. Each tab contains related fields. First tab mandatory - generates Student ID and unlocks remaining tabs.
+| # | Tab | Status | File |
+|---|---|---|---|
+| 1 | Identity & Academic | ✅ Implemented | `tabs/Tab1Identity.tsx` |
+| 2 | Guardian Details | ❌ Stub | — |
+| 3 | Social & Background | ✅ Implemented | `tabs/Tab3PersonalProfile.tsx` |
+| 4 | Address | ❌ Stub | — |
+| 5 | Academic Profile | ❌ Stub | — |
+| 6 | Photo & Health | ❌ Stub | — |
+| 7 | Parent Information | ❌ Stub | — |
+| 8 | Transfer & Transport | ❌ Stub | — |
+| 9 | Siblings & Documents | ❌ Stub | — |
+| 10 | Government IDs & Finance | ❌ Stub | — |
 
-**Global conditional display rules:**
-- Subcaste field and Caste Certificate Number appear only if Category = SC, ST, or OBC.
-- Religion / Belief manual entry field appears only if Religion / Belief = Other.
-- Transfer block in Tab 8 expands only if Previous School Name is filled OR Admission Type = Transfer.
-- Transport fields in Tab 8 appear only if Opted for Transport = Yes.
-- Disability Specification field appears only if Disability Type = Other.
-- Disability Certificate upload appears only if Disability Type ≠ None.
-- Minority Details section in Tab 10 appears only if Minority = Yes (set in Tab 3).
-- Guardian fields appear and become mandatory only if Primary Guardian = Guardian, Grandparent, or Other.
-- Father fields become mandatory only if Primary Guardian = Father.
-- Mother fields become mandatory only if Primary Guardian = Mother.
-- Permanent Address fields appear only if "Same as Local Address" is unchecked.
-- Aadhar input disabled if "Aadhar Not Available" is checked.
-- IFSC Code required if Student Bank A/c No. is filled.
-- Caste Certificate Number required if Category = SC, ST, or OBC.
-- School Internal ID field appears only in Tab 7.
+Container implements tab-completion lock: tabs 2–10 disabled until Tab 1 saves successfully (`tabStatus[1] === false` → all locked).
 
-**Document upload / preview pattern (applies everywhere a document field exists):**
-- Not uploaded → Upload button only.
-- Uploaded → Thumbnail preview + × to remove + upload button to replace.
-- Every uploaded document has Download button once file exists.
-- Aadhar No. has no document upload.
-- SSSM ID has separate upload button for physical card copy.
+### Container contract
 
-**Draft Mode:**
-- Every tab supports "Save".
-
-**Mobile Responsive:**
-- 10-tab wizard collapses into vertical stepper on tablets and mobile.
-- Field groups stack vertically; dropdowns become native mobile pickers.
+- `StudentFormDialog({ open, onClose })` — controlled open/close.
+- Internal state: `activeTab: 1..10`, `form: Partial<Tab1Form>`, `errors`, `tabStatus: Record<TabIndex, boolean>`.
+- Zod schemas imported from `@/lib/schemas`: `studentTab1Schema` … `studentTab10Schema`. Only `studentTab1Schema` and `studentTab3Schema` are exercised by current tabs.
+- `handleSaveTab1` calls `reserve_student_id` RPC. ID assignment path is wired; subsequent tabs not yet rendered.
+- Footer: Cancel + Save & Continue / Next.
 
 ---
 
-## Student_ID Allocation
+## Student ID Format
 
-### Format
+`S{YY}{ACRONYM}{SEQ:00000}` — Student, year, school acronym, 5-digit sequence.
 
-`S{YY}{ACRONYM}{SEQ:00000}`
+| Segment | Meaning |
+|---|---|
+| `S` | Fixed prefix |
+| `{YY}` | Last 2 digits of creation year |
+| `{ACRONYM}` | School acronym (frozen at creation) |
+| `{SEQ:00000}` | 5-digit sequential, max 99999 per year per school |
 
-| Segment | Meaning | Source |
+**Example:** `S26IIS00001`
+
+### Reserve-Release (spec)
+
+1. **`student_id_sequences`** table — `(school_id, year, last_assigned, reserved_count)`.
+2. **Preview** — read `last_assigned`, reserve `last+1..last+N`, increment `reserved_count` with row-level lock.
+3. **Cancel / timeout (30min)** — release.
+4. **Commit** — `last_assigned += N`, `reserved_count -= N`.
+5. **Simultaneous imports** — atomic row-level lock prevents collision.
+
+**Edge cases:** Jan 1 year rollover → sequence resets. Acronym change → existing IDs keep old acronym forever.
+
+**Status:** `reserve_student_id` RPC called by `handleSaveTab1`. Migration for sequence table + `release_/commit_` RPCs **not yet shipped** (Phase 1 PENDING in §Unfinished Tasks).
+
+---
+
+## Field Reference (per tab)
+
+### Tab 1 — Identity & Academic (implemented)
+First/Middle/Last Name, Father First/Middle/Last Name, Gender, Login Mobile, Class (DB dropdown), Section (DB dropdown), Subject checkboxes (My School → Subject Tab, filtered by class), House (DB dropdown).
+
+On save → Student ID generated → remaining tabs unlock.
+
+### Tab 2 — Guardian Details (planned)
+Primary Guardian (hidden logic), Father/Mother/Guardian Mobile + WhatsApp + Email, Guardian Name + Relation, Student Mobile + WhatsApp, Emergency Contact (Name/Number/WhatsApp/Relation), Email.
+
+Conditional: Father/Mother/Guardian fields mandatory based on Primary Guardian choice.
+
+### Tab 3 — Social & Background (implemented)
+Category, Subcaste (conditional: SC/ST/OBC), Caste Certificate Number (conditional, required for SC/ST/OBC), Religion/Belief + Specify (conditional), Nationality, Mother Tongue, Medium of Instruction, Minority, Only Child, Single Parent/Orphan, First Generation Learner.
+
+### Tab 4 — Address (planned)
+Address Line 1/2, City/Village, District (master dropdown), State, PIN. Permanent Address fields appear only if "Same as Local Address" unchecked.
+
+### Tab 5 — Academic Profile (planned)
+Admission Date*, Admission Type, Roll Number (auto-generated, read-only preview), Account Status.
+
+### Tab 6 — Photo & Health (planned)
+Photo*, Blood Group, Height (cm), Weight (kg), Date of Measurement.
+
+### Tab 7 — Parent Information (planned)
+School Internal ID (admin reference), Father/Mother/Guardian Qualification + Occupation + Photo. Mother Education Level. Guardian fields conditional on Primary Guardian.
+
+### Tab 8 — Transfer & Transport (planned)
+Previous School Name/UDISE/Board, Last Exam Class/Year/Result/Percentage, SLC, Opted for Transport (gates Bus Route/Stop).
+
+### Tab 9 — Siblings & Documents (planned)
+Siblings sub-table (+ Add, soft limit 5). Toggle+upload rows: Birth, Caste, Marksheet, SLC, Aadhar, Disability, Minority, Bank Passbook. Auto-toggle rule: file uploaded → toggle = Yes. Warning rule: toggle = Yes but no file → "Document marked received but no file uploaded."
+
+### Tab 10 — Government IDs & Finance (planned)
+Aadhar No. (disabled if "Aadhar Not Available" checked), SSSM ID + Family ID (conditional if school.state = MP), Disability Type + Specification (conditional) + Percentage (required if ≠ None) + Certificate, Student Bank A/c No., IFSC (required if A/c filled), Bank Name/Branch, Passbook, Receives Free Textbooks, Receives Midday Meal, Receives Scholarship (+ Scholarship Name), BPL/AAY/EWS Status, RTE Admission (auto-set if Admission Type = RTE Quota), Minority Certificate Received + Upload.
+
+---
+
+## Global conditional rules
+
+| Trigger | Effect |
+|---|---|
+| Category = SC/ST/OBC | Show Subcaste + Caste Certificate Number (latter required) |
+| Religion/Belief = Other | Show manual specify |
+| Admission Type = Transfer or Previous School Name filled | Expand transfer block in Tab 8 |
+| Opted for Transport = Yes | Show Bus Route + Bus Stop |
+| Disability Type = Other | Show Specification |
+| Disability Type ≠ None | Show Disability Certificate |
+| Minority = Yes (set in Tab 3) | Show Minority Details in Tab 10 |
+| Primary Guardian = Father/Mother/Guardian/Grandparent/Other | Show & require matching fields |
+| Same as Local Address unchecked | Show + require Permanent Address fields |
+| Aadhar Not Available checked | Disable Aadhar input |
+| Student Bank A/c filled | Require IFSC |
+| School Internal ID | Tab 7 only |
+
+**Document pattern (applies everywhere):** not uploaded → Upload button only · uploaded → thumbnail + × to remove + upload-to-replace + Download · Aadhar no upload · SSSM ID has separate upload for physical card copy.
+
+**Mobile:** 10-tab wizard collapses to vertical stepper on tablets/mobile. Field groups stack vertically. Dropdowns become native pickers.
+
+---
+
+## Bulk Operations (planned — not implemented)
+
+| | **Quick Enrollment** | **Bulk Full Import** |
 |---|---|---|
-| `S` | Fixed prefix — "Student" | Hardcoded |
-| `{YY}` | Last 2 digits of creation year | System date at creation |
-| `{ACRONYM}` | School acronym | Fetched from School Profile → Acronym at creation. **Frozen forever** even if principal changes later. |
-| `{SEQ:00000}` | 5-digit sequential | Per school, per year, auto-incrementing. Max 99999 per year per school. |
-
-**Example:** `S26IIS00001` — Student, created in 2026, school acronym IIS, first student of year.
-
-### Reserve-Release Pattern
-
-1. **Sequence Table** in DB:
-   ```
-   student_id_sequences
-   - school_id (FK)
-   - year (int)
-   - last_assigned (int, default 0)
-   - reserved_count (int, default 0)
-   ```
-
-2. **Preview Step** (Pre-Validation UI):
-   - System reads `last_assigned` for current school + year.
-   - For N rows, tentatively reserves IDs: `S{YY}{ACRONYM}{last+1}` to `S{YY}{ACRONYM}{last+N}`.
-   - Increments `reserved_count` by N (with row-level DB lock).
-   - Shows assigned IDs in preview table.
-
-3. **Cancel / Navigate Away / Timeout:**
-   - Reserved IDs released after 30 minutes of inactivity.
-   - Background job cleans up expired reservations.
-
-4. **Confirm & Commit:**
-   - On final commit, reserved IDs committed.
-   - `last_assigned` updated to `last_assigned + N`.
-   - `reserved_count` reduced by N.
-
-**Edge Cases:**
-- Year Rollover: Jan 1 new year → sequence starts at 0001 (e.g., `S27IIS0001`).
-- School Acronym Change: Existing IDs keep old acronym forever; new students get new.
-
----
-
-## Tab 1 — Identity & Academic (Required)
-
-First Name*
-Middle Name
-Last Name*
-Father First Name*
-Father Middle Name
-Father Last Name*
-Gender*
-Login Mobile*
-CLASS - fetched from DB dropdown
-SECTION - fetched from DB dropdown
-SUBJECT CHECKBOXES - fetched from My School → Subject Tab according to selected class
-HOUSE - fetched from DB dropdown
-
-On save: Student ID generates and remaining tabs unlock.
-
----
-
-## Tab 2 — Guardian Details
-
-Primary Guardian (hidden, logic only)
-Father's Mobile (conditional)
-Father's WhatsApp Checkbox
-Father's Email
-Mother's Mobile (conditional)
-Mother's WhatsApp Checkbox
-Mother's Email
-Guardian's First Name (conditional)
-Guardian's Middle Name
-Guardian's Last Name (conditional)
-Guardian's Mobile (conditional)
-Guardian's WhatsApp Checkbox
-Guardian Relation
-Student's Mobile (optional)
-Student's WhatsApp Checkbox
-Emergency Contact Name
-Emergency Contact Number
-Emergency Contact WhatsApp
-Emergency Contact Relation
-Email
-
----
-
-## Tab 3 — Social & Background
-
-Category
-Subcaste (conditional, appears if Category = SC, ST, or OBC)
-Caste Certificate Number (conditional, required if Category = SC, ST, or OBC)
-Religion / Belief
-Religion / Belief (specify) (conditional, appears if Religion / Belief = Other)
-Nationality
-Mother Tongue
-Medium of Instruction
-Minority
-Only Child
-Single Parent / Orphan
-First Generation Learner
-
----
-
-## Tab 4 — Address
-
-Address Line 1*
-Address Line 2
-City / Village*
-District*
-State*
-PIN Code*
-Same as Local Address (checkbox)
-Permanent Address Line 1 (conditional, required if Same as Local Address unchecked)
-Permanent Address Line 2
-Permanent City / Village (conditional, required if Same as Local Address unchecked)
-Permanent District (conditional, required if Same as Local Address unchecked)
-Permanent State (conditional, required if Same as Local Address unchecked)
-Permanent PIN Code (conditional, required if Same as Local Address unchecked)
-
----
-
-## Tab 5 — Academic Profile
-
-Admission Date*
-Admission Type
-Roll Number (auto-generated, read-only preview)
-Account Status
-
----
-
-## Tab 6 — Photo & Health
-
-Photo*
-Blood Group
-Height (cm)
-Weight (kg)
-Date of Measurement
-
----
-
-## Tab 7 — Parent Information
-
-School Internal ID (optional, for admin reference)
-Father's Qualification
-Father's Occupation
-Father's Photo
-Mother's Qualification
-Mother's Occupation
-Mother's Photo
-Mother's Education Level
-Guardian's Qualification (conditional, appears if Primary Guardian = Guardian / Grandparent / Other)
-Guardian's Occupation (conditional, appears if Primary Guardian = Guardian / Grandparent / Other)
-Guardian's Photo (conditional, appears if Primary Guardian = Guardian / Grandparent / Other)
-
----
-
-## Tab 8 — Transfer & Transport
-
-Previous School Name
-Previous School UDISE No.
-Previous School Board
-Last Exam Class
-Last Exam Year
-Last Exam Result
-Last Exam Percentage
-School Leaving Certificate
-Opted for Transport
-Bus Route (conditional, appears if Opted for Transport = Yes)
-Bus Stop (conditional, appears if Opted for Transport = Yes)
-
----
-
-## Tab 9 — Siblings & Documents
-
-Siblings (+ Add button, soft limit at 5)
-Birth Certificate (toggle + upload)
-Caste Certificate (toggle + upload)
-Marksheet of Previous Class (toggle + upload)
-School Leaving Certificate (toggle + upload)
-Aadhar Card (toggle + upload)
-Disability Certificate (toggle + upload)
-Minority Certificate (toggle + upload)
-Bank Passbook (toggle + upload)
-
-**Auto-toggle rule:** If file uploaded, toggle auto-switches to Yes.
-**Warning rule:** If toggle = Yes but no file, show warning: "Document marked received but no file uploaded."
-
----
-
-## Tab 10 — Government IDs & Finance
-
-Aadhar No.
-Aadhar Not Available (disables Aadhar No. field if checked)
-SSSM ID (Samagra, conditional if school state = MP)
-Family ID No. (conditional if school state = MP)
-Disability Type
-Disability Specification (conditional if Disability Type = Other)
-Disability Percentage (required if Disability Type ≠ None)
-Disability Certificate (conditional if Disability Type ≠ None)
-Student Bank A/c No.
-IFSC Code (required if Student Bank A/c No. filled)
-Bank Name
-Bank Branch
-Bank Passbook
-Receives Free Textbooks
-Receives Midday Meal
-Receives Scholarship
-Scholarship Name (conditional if Receives Scholarship = Yes)
-BPL / AAY / EWS Status
-RTE Admission (auto-set if Admission Type = RTE Quota)
-Minority Certificate Received
-Minority Certificate
-
----
-
-## Profile Completion Bar
-
-Calculated across all 10 tabs. No functional restrictions at any level.
-
-**Guided Completion Panel:**
-Will show completion status and guidance per tab.
-
-**Quick Enrollment Behavior:**
-Quick-enrolled students start at ~35% completion.
-
----
-
-## Bulk Operations
-
-### Two-Mode Architecture
-
-|  | **Quick Enrollment** | **Bulk Full Import** |
-|---|---|---|
-| **Purpose** | Start-of-year rush. Admit hundreds in minutes. | Complete data migration from old system. |
-| **Fields** | 10 columns only | All Tab 1 + Tab 2 + Tab 3 + Tab 4 + Tab 5 + Tab 6 + Tab 7 + Tab 8 + Tab 9 (optional) + Tab 10 (optional) |
-| **Status** | Active immediately | Active immediately |
-| **Validation** | Lenient. Warnings instead of hard blocks. | Strict. Hard errors on missing required fields. |
-| **Photos** | Not included. Auto-generated avatar. | Not included. Auto-generated avatar. |
-| **Profile Completion** | ~35% after import | ~80% after import (Tab 1-8 complete) |
+| Purpose | Start-of-year rush. Admit hundreds in minutes. | Complete data migration from old system. |
+| Fields | 10 columns | All tabs (~80+ columns) |
+| Status | Active immediately | Active immediately |
+| Validation | Lenient (warnings) | Strict (hard errors) |
+| Photos | None (auto-avatar) | None (auto-avatar) |
+| Profile Completion | ~35% after import | ~80% after import |
 
 ### Quick Enrollment Template (10 columns)
+1. `first_name` — max 50
+2. `last_name` — max 50
+3. `gender` — Male/Female/Other
+4. `date_of_birth` — DD/MM/YYYY (age 2.5–20)
+5. `class` — must match active session
+6. `section` — must match active session
+7. `house` — must match House Master
+8. `father_first_name` — max 50
+9. `father_last_name` — max 50
+10. `login_mobile` — `+91XXXXXXXXXX`
 
-1. `first_name` - Max 50 chars
-2. `last_name` - Max 50 chars
-3. `gender` - Must be: Male, Female, or Other
-4. `date_of_birth` - DD/MM/YYYY (Age 2.5-20 yrs)
-5. `class` - Must match active Session Form
-6. `section` - Must match active Session Form
-7. `house` - Must match House Master
-8. `father_first_name` - Max 50 chars
-9. `father_last_name` - Max 50 chars
-10. `login_mobile` - +91XXXXXXXXXX
-
-### Auto-Defaults for Quick Enrollment
-
-| Missing Field | Auto-Default |
-|---|---|
-| Student_ID | Auto-generated |
-| Primary Guardian | Father |
-| Father's Mobile | =login_mobile |
-| Father's Email | Blank |
-| Mother's details | All blank |
-| Guardian details | Hidden |
-| Emergency Contact | =father details |
-| Admission Date | Today |
-| Admission Type | New |
-| Category | General |
-| Address fields | Blank |
-| Nationality | Indian |
-| Other social fields | Blank/No |
-| Account Status | Active |
+### Quick Enrollment Auto-Defaults
+Missing field → auto-default: `Primary Guardian = Father` · `Father's Mobile = login_mobile` · `Father's Email` blank · `Mother's details` blank · `Guardian details` hidden · `Emergency Contact = father details` · `Admission Date = today` · `Admission Type = New` · `Category = General` · `Address fields` blank · `Nationality = Indian` · `Account Status = Active` · other social fields blank/No.
 
 ### Full Import Template
-
-Includes all Tab 1-10 required and optional fields (80+ columns).
-Column headers must not be renamed or reordered.
+~80+ columns covering Tabs 1–10. Headers not renameable, not reorderable.
 
 ---
 
 ## House Management
 
-### Default Houses
-RED, BLUE, GREEN, YELLOW
+**Default houses:** RED, BLUE, GREEN, YELLOW.
 
-### Principal Control
-- Rename, add, delete houses from School Profile → House Section
-- Student.House is foreign key to House Master
-- Delete blocked if students assigned
-- Rename instant for all students
+**Principal control** — School Profile → House section: rename, add, delete. `student.house` is FK to House Master. Delete blocked if students assigned. Rename instant for all.
 
-### Validation
-House name must match exactly (case-insensitive) House Master.
+**Validation:** name must match House Master exactly (case-insensitive).
 
 ---
 
-## Recent Bulk Actions & Revert
+## Recent Bulk Actions & Revert (planned)
 
-### Recent Bulk Actions Panel
-Shows: Date, User, Mode, Count, Status, [Revert] link
+**Panel:** Date · User · Mode · Count · Status · [Revert]
 
-### Revert Rules
-- Available for 2 hours after creation
-- Deletes batch and releases IDs back to pool
-- Irreversible
-- Confirmation shows count and ID range
+**Revert rules:** available for 2 hours after creation · deletes batch · releases IDs back to pool · irreversible · confirmation shows count and ID range.
 
-### Error Prevention
-- Dry Test button
-- Review & Confirm page
-- Download Preview Report
-- Max 500 rows per file
-- 2-hour revert window
+**Error prevention:** Dry Test button · Review & Confirm page · Download Preview Report · max 500 rows/file · 2-hour revert window.
 
 ---
 
-## Unfinished Tasks
+## Profile Completion Bar (planned)
 
-### Phase 1: Reserve-Release (IN PROGRESS)
-- [x] Reserve student ID RPC call in form
-- [x] Commit on save (wired in handleFinalSave)
+Calculated across all 10 tabs. **No functional restrictions** at any level.
+
+Guided Completion Panel: per-tab status + guidance. Quick-enrolled students start at ~35%.
+
+---
+
+## Unfinished Tasks (Phase 1–5)
+
+### Phase 1 — Reserve-Release
+- [x] `reserve_student_id` RPC called in `handleSaveTab1`
+- [x] Commit on save (in `handleFinalSave`)
 - [ ] Release on timeout/cancel (needs edge function cleanup)
-- [ ] Migration for student_id_sequences table
-- [ ] Migration for reserve_student_id RPC
-- [ ] Migration for release_student_id RPC
-- [ ] Migration for commit_student_id RPC
+- [ ] Migration for `student_id_sequences` table
+- [ ] Migration for `reserve_/release_/commit_student_id` RPCs
 
-### Phase 2: Document Uploads (PENDING)
-- [ ] UploadField uses `<Input type="file">` — needs Supabase Storage integration
-- [ ] DocumentRow component needs refactor for storage bucket
-- [ ] Create storage bucket for student documents
-- [ ] Add upload/delete functions using Supabase Storage API
-- [ ] Handle upload progress, error, cleanup
+### Phase 2 — Document Uploads
+- [ ] `UploadField` uses `<Input type="file">` — needs Supabase Storage
+- [ ] `DocumentRow` refactor for storage bucket
+- [ ] Storage bucket for student documents
+- [ ] Upload/delete functions using Supabase Storage API
+- [ ] Upload progress / error / cleanup
 
-### Phase 3: Integration Gaps (PENDING)
-- [ ] Aadhar encrypt — calls RPC encrypt_text that doesn't exist
-- [ ] IFSC code validation — no real-time format check
+### Phase 3 — Integration Gaps
+- [ ] Aadhar encrypt — calls RPC `encrypt_text` that doesn't exist
+- [ ] IFSC validation — no real-time format check
 - [ ] Duplicate mobile check — not implemented for new field names
-- [ ] School.acronym fetch — hardcoded as "SCH"
-- [ ] Academic year — hardcoded as "26"
+- [ ] `school.acronym` fetch — hardcoded as `"SCH"`
+- [ ] Academic year — hardcoded as `"26"`
 
-### Phase 4: Bulk Import Rewrite (PENDING)
-- [ ] Current 14-column spec is outdated
-- [ ] Needs 10-column Quick Enrollment mode
-- [ ] Needs 80-column Full Import mode
+### Phase 4 — Bulk Import Rewrite
+- [ ] Current 14-column spec outdated
+- [ ] 10-column Quick Enrollment mode
+- [ ] 80-column Full Import mode
 - [ ] Pre-validation UI (green/yellow/red indicators)
 - [ ] Tentative ID Preview table
 - [ ] Dry Test functionality
 - [ ] Recent Bulk Actions panel
 - [ ] Revert within 2hr window
 
-### Phase 5: UI Polish (PENDING)
+### Phase 5 — UI Polish
 - [ ] Class 11/12 Subject checkbox (toggle + bucket UI)
 - [ ] District master dropdown
 - [ ] Same as Local Address checkbox logic
 - [ ] Mother fields conditional on Primary Guardian
 - [ ] Live Login Mobile uniqueness check
 - [ ] Profile completion bar calculation update
+- [ ] Implement Tabs 2, 4, 5, 6, 7, 8, 9, 10 components
 
-### Next Session Priority
-1. Add migrations for Reserve-Release tables/functions
-2. Fix hardcoded values (schoolAcr, academic year)
-3. Add document upload to Supabase Storage
-4. Implement live validation (IFSC, duplicate mobile)
-5. Rewrite bulk import for 10-col/80-col modes
+### Next session priority
+1. Implement Tab 2 (Guardian Details) and Tab 4 (Address) — no schema risk, pure UI.
+2. Ship Phase 1 migrations (`student_id_sequences` table + RPCs).
+3. Fix hardcoded values (`school.acronym`, academic year) — read from session.
+4. Add document upload to Supabase Storage (Phase 2).
+5. Live validation: IFSC format, duplicate mobile check.
+6. Bulk import rewrite for 10-col/80-col modes.

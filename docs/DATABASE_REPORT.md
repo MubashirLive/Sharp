@@ -3,6 +3,8 @@
 **Updated:** 2026-05-22
 **Branch:** Chatting_Feature_MK
 
+> Snapshot of audit at the time. For current status, see [REPORT_2.md](REPORT_2.md) (cron run 2026-06-07) and [TASK.md](TASK.md) for open work.
+
 ---
 
 ## P0 — CRITICAL

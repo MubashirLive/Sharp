@@ -1,6 +1,26 @@
 # Attendance Register — Functional Specification
 
----
+> Last updated: 2026-06-17
+> Status: ✅ Built. Implemented in `src/pages/Attendance.tsx` (499 LOC) and `src/components/attendance/`. RLS on `attendance_register`, `attendance_period_marks`, `leave_requests`, `low_attendance_alerts`. 3-consecutive-absence auto-alert wired via `notify-consecutive-absence` (planned) and `school_calendar` 3-check gate.
+
+## Build vs spec
+
+| Spec area | Status | Notes |
+|---|---|---|
+| Class Teacher full-day mark | ✅ Built | Own class-section only |
+| Class Teacher per-period mark | ✅ Built | School chooses mode at setup |
+| Coordinator scope (wing) | ✅ Built | |
+| Edit ≤24h with reason | ✅ Built | Class Teacher + Coordinator |
+| Edit >24h needs admin override | ✅ Built | Principal/Master Admin/Admin |
+| 3-consecutive-absence auto alert | ✅ Built | Stored in `low_attendance_alerts` |
+| <75% profile flag | ✅ Built | |
+| Student monthly calendar (G/R/Y) | ✅ Built | `src/pages/Attendance.tsx` student view |
+| Student apply leave | ✅ Built | |
+| Admin approve leave | ✅ Built | Class Teacher (own class) / Admin (any) |
+| Admin class summary + export | ✅ Built | CSV export |
+| School-wide view (Principal) | ✅ Built | |
+| Holiday skip on bulk import | ✅ Built | Calendar-aware import |
+| Period-wise vs full-day toggle | ✅ Built | Set per school at setup |
 
 ## 1. Role-Based Access & Permissions
 
@@ -69,7 +89,6 @@ When a staff member holds both the **Class Teacher** and **Coordinator** roles s
 ---
 
 ## 3. Attendance Register — Filters & Navigation
-Here is the full written spec:
 
 ---
 

@@ -1,143 +1,98 @@
 # SHARP — Permission & Feature Matrix
 
-> Last updated: May 2026
-> ✅ Full Access | 👁 View Only | ❌ No Access | ⚙️ Configurable by Principal | — Not yet decided
+> Updated 2026-06-17. ✅ Full | 👁 View | ❌ None | ⚙️ Principal-config | — N/A
 
----
-
-## SECTION 1 — LOGIN & AUTH
-
-| Feature | Super Admin | Principal | Master Admin | Admin | Teacher | Non-Teaching | Student/Parent |
+## Section 1 — Login & Auth
+| Feature | Super | Principal | Master Admin | Admin | Teacher | Non-Teach | Student |
 |---|---|---|---|---|---|---|---|
-| Email + password login | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Email + password | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | OTP first login | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 6-digit PIN daily login | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2FA (toggleable by Super Admin) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| PIN reset via mobile OTP | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Update own registered mobile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Update another staff's mobile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Update student Login Mobile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Forced PIN setup on first login | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| OTP on session expiry / new device | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 6-digit PIN daily | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 2FA (super toggle) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| PIN reset via OTP | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Update own mobile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Update other staff mobile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Update student mobile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Forced PIN setup | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OTP on session/new device | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-> Forced PIN setup on first login is a system-wide rule enforced at authentication level. It is not a configurable toggle — it applies to every role without exception and cannot be turned off from any form or settings screen.
+> Forced PIN = system-wide, not a toggle. Applies to every role.
 
----
-
-## SECTION 2 — ONBOARDING & SETUP
-
-See docs/ONBOARDING.md for full spec.
-
-| Feature | Super Admin | Principal | Master Admin | Admin | Teacher | Non-Teaching | Student/Parent |
+## Section 2 — Onboarding & Setup
+| Feature | Super | Principal | Master Admin | Admin | Teacher | Non-Teach | Student |
 |---|---|---|---|---|---|---|---|
 | Create Principal ID | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Edit Super Admin entered fields | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Complete / Edit School Form | ✅ | 👁 | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Complete / Edit Additional Info Form | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-
-> **Note (Complete / Edit School Form):** Super Admin creates the school and sets all identity and location fields. Principal views all fields after onboarding; can only edit `contact_phone` and `contact_email` (school office contact) via the "My School" page.
+| Edit super-admin fields | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| View/Edit School Form | ✅ | 👁(contact only) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Complete Additional Info | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Complete Session Form | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Create Master Admin ID | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Create Admin ID | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Create Teacher ID | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Create Non-Teaching Staff ID | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Create Student ID | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Edit Student profile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Bulk import Students | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Bulk import Staff | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Assign Academic roles to Student (House, Stream, Wing) | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Activate / deactivate school | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Activate / deactivate accounts | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
+| Create Teacher/Non-Teach/Student | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Edit student profile | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Bulk import students/staff | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Academic assignment (House/Stream/Wing) | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Activate/deactivate school | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Activate/deactivate accounts | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
 | Delete school | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-> Bulk import: all or nothing. One bad cell rejects entire file. Bare minimum columns only.
-> Academic Assignment (House, Stream, Wing) for students is a separate action performed after student record creation — not part of the creation form.
+> Bulk import = all-or-nothing. Academic assignment is post-creation.
 
----
-
-## SECTION 3 — ROLES & PERMISSIONS MANAGEMENT
-
-| Feature | Super Admin | Principal | Master Admin | Admin | Teacher | Non-Teaching | Student/Parent |
+## Section 3 — Roles & Permissions
+| Feature | Super | Principal | Master Admin | Admin | Teacher | Non-Teach | Student |
 |---|---|---|---|---|---|---|---|
-| View permission matrix | ✅ | ✅ | 👁 | ❌ | ❌ | ❌ | ❌ |
+| View matrix | ✅ | ✅ | 👁 | ❌ | ❌ | ❌ | ❌ |
 | Edit role permissions | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Assign role to staff | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
-| Assign Subject Teacher / Class Teacher | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
-| Create custom roles | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Manage billing / subscription | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Assign Subject/Class Teacher | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
+| Custom roles | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Billing | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
----
-
-## MVP MODULE 1 — MESSENGER
-
-**Rules:**
-- Super Admin has zero access.
-- Students cannot see or message other students.
-- Students can only message assigned teacher + designated admin staff.
-- Students can send in teacher-formed groups — not groups they create.
-- Broadcasts one-way (school → students). Student replies go into private thread visible only to them + broadcast admin.
-- Messages cannot be deleted after 2 minutes.
-- Media: images and PDFs only.
-
-| Feature | Super Admin | Principal | Master Admin | Admin | Teacher | Non-Teaching | Student/Parent |
+## MVP 1 — Messenger ✅
+Rules: super ❌; students ↔ assigned teacher + designated admin only; teacher-formed groups; broadcasts one-way; 2-min delete; image+PDF; read receipts.
+| Feature | Super | Principal | Master Admin | Admin | Teacher | Non-Teach | Student |
 |---|---|---|---|---|---|---|---|
-| Access messenger | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Send individual message | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ |
-| Receive individual message | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ |
-| Message other students | ❌ | — | — | — | — | — | ❌ |
-| Message assigned teacher | ❌ | — | — | — | — | — | ✅ |
-| Message designated admin staff | ❌ | — | — | — | — | — | ✅ |
+| Access | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Send/Receive DM | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ |
+| Student ↔ Student | ❌ | — | — | — | — | — | ❌ |
+| Student ↔ assigned teacher | ❌ | — | — | — | — | — | ✅ |
 | Create group | ❌ | ✅ | ✅ | ⚙️ | ⚙️ | ❌ | ❌ |
 | Create broadcast | ❌ | ✅ | ✅ | ⚙️ | ⚙️ | ❌ | ❌ |
 | Send in teacher-formed group | ❌ | — | — | — | ✅ | — | ✅ |
-| Delete own message (within 2 min) | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Delete any message | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
-| Share image | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ |
-| Share PDF | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ |
-| View read receipts | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Archive / audit chat logs | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
-| Search messages | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Delete own (≤2 min) | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Delete any | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
+| Share image/PDF | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ |
+| Read receipts | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Archive/audit logs | ❌ | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
+| Search | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
----
-
-## MVP MODULE 2 — HOMEWORK
-
-> ⚠️ Fill before building.
-
-| Feature | Super Admin | Principal | Master Admin | Admin | Teacher | Non-Teaching | Student/Parent |
+## MVP 2 — Homework ✅
+| Feature | Super | Principal | Master Admin | Admin | Teacher | Non-Teach | Student |
 |---|---|---|---|---|---|---|---|
-| Assign homework | — | — | — | — | — | — | — |
-| Edit assigned homework | — | — | — | — | — | — | — |
-| Delete assigned homework | — | — | — | — | — | — | — |
-| View homework list | — | — | — | — | — | — | — |
-| Submit homework digitally | — | — | — | — | — | — | — |
-| Mark as done on paper | — | — | — | — | — | — | — |
-| Review submission | — | — | — | — | — | — | — |
-| Add marks / comments | — | — | — | — | — | — | — |
-| View class completion report | — | — | — | — | — | — | — |
-| Receive homework notification | — | — | — | — | — | — | — |
+| Assign | ❌ | 👁 | 👁 | 👁 | ✅(own class/sub) | ❌ | ❌ |
+| Edit assigned | ❌ | ⚙️ | ⚙️ | ⚙️ | ✅(own, not checked) | ❌ | ❌ |
+| Delete assigned | ❌ | ✅ | ✅ | ✅ | ✅(own, not checked) | ❌ | ❌ |
+| View list | ❌ | ✅ | ✅ | ✅ | ✅ | 👁 | ✅ |
+| Submit digital | ❌ | — | — | — | — | — | ✅ |
+| Mark done on paper | ❌ | — | — | — | — | — | ✅ |
+| Review submission | ❌ | 👁 | 👁 | 👁 | ✅(own) | ❌ | ❌ |
+| Add marks/comments | ❌ | 👁 | 👁 | 👁 | ✅(own) | ❌ | — |
+| Class completion report | ❌ | ✅ | ✅ | ✅ | ✅(own) | ❌ | — |
+| Notification | ❌ | — | — | — | — | — | ✅ |
 
----
-
-## MVP MODULE 3 — ATTENDANCE
-
-> ⚠️ Fill before building.
-
-| Feature | Super Admin | Principal | Master Admin | Admin | Teacher | Non-Teaching | Student/Parent |
+## MVP 3 — Attendance ✅
+| Feature | Super | Principal | Master Admin | Admin | Teacher | Non-Teach | Student |
 |---|---|---|---|---|---|---|---|
-| Mark student attendance | — | — | — | — | — | — | — |
-| Edit attendance within 24hrs | — | — | — | — | — | — | — |
-| Edit attendance after 24hrs | — | — | — | — | — | — | — |
-| View own class attendance | — | — | — | — | — | — | — |
-| View school-wide attendance | — | — | — | — | — | — | — |
-| View own attendance record | — | — | — | — | — | — | — |
-| Receive low attendance alert | — | — | — | — | — | — | — |
-| Apply student leave | — | — | — | — | — | — | — |
-| Approve student leave | — | — | — | — | — | — | — |
-| Export attendance report | — | — | — | — | — | — | — |
+| Mark student | ❌ | 👁 | 👁 | 👁 | ✅(class teacher) | ❌ | — |
+| Edit ≤24h | ❌ | ✅ | ✅ | ✅ | ✅(with reason) | ❌ | — |
+| Edit >24h | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | — |
+| View own class | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | — |
+| School-wide | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | — |
+| View own record | ❌ | — | — | — | — | — | ✅ |
+| Low-attendance alert | ❌ | ✅ | ✅ | ✅ | — | — | ✅ |
+| Apply leave | ❌ | — | — | — | — | — | ✅ |
+| Approve leave | ❌ | ✅ | ✅ | ✅ | ✅(own class) | ❌ | — |
+| Export | ❌ | ✅ | ✅ | ✅ | ✅(own class) | ❌ | — |
 
----
-
-## FUTURE MODULES (add matrix when built)
-
-Timetable, Fee Management, HR & Payroll, Analytics Dashboard, Resources Manager, Holiday & Event Calendar, Complaint & Grievance, Notice Board / Feed, My Docs, School Status, Transport Management, Library Management.
+## Future Modules
+Timetable, Fees, HR & Payroll, Analytics, Resources, Holiday & Event (Calendar ✅), Complaint, Notice Board, My Docs, School Status, Transport (in Student Form), Library, Admissions CRM, Quiz/MCQ.

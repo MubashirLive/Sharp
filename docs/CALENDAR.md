@@ -1,6 +1,6 @@
 # SHARP — Calendar Module Specification
 
-> **Version:** May 2026 | **Status:** Events Tab Implemented
+> **Version:** 2026-06-17 | **Status:** ✅ Built (Events + Working Week tabs). Implemented in `src/pages/Calendar.tsx` (381 LOC) + `src/components/calendar/`.
 
 ---
 

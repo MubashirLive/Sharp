@@ -32,7 +32,7 @@
 - **Departments tab** — per-department: assign department members + incharge via department cards.
 - **Houses tab** — per-house: assign staff to houses + designate house incharges via house cards.
 
-All five write to the same source tables (`staff_roles`, `class_teachers`, `wing_staff`, `departments_staff`, `department_incharges`, `house_staff`, `house_incharges`, `profiles.status`). Edits in any tab reflect across all other tabs. **SchoolPage** is the read-only mirror for the rest of the app (e.g. SchoolPage's Wings tab shows which classes belong to which wing; Role Manager's Wings tab assigns which staff belong to that wing). The SchoolPage Subject Tab is a separate concern: it assigns **subjects to class-sections** (writes `section_subjects`), not teachers — Role Manager's Subjects tab assigns **teachers to subjects** (writes `staff_roles`/`class_teachers`).
+All five write to the same source tables (`staff_roles`, `class_teachers`, `wing_staff`, `department_staff`, `house_staff`, `house_incharges`, `profiles.status`). Edits in any tab reflect across all other tabs. **SchoolPage** is the read-only mirror for the rest of the app (e.g. SchoolPage's Wings tab shows which classes belong to which wing; Role Manager's Wings tab assigns which staff belong to that wing). The SchoolPage Subject Tab is a separate concern: it assigns **subjects to class-sections** (writes `section_subjects`), not teachers — Role Manager's Subjects tab assigns **teachers to subjects** (writes `staff_roles`/`class_teachers`).
 
 ### Access & Permissions
 
@@ -92,27 +92,19 @@ CREATE TABLE wing_staff (
 );
 ```
 
-**`departments_staff`** — Department membership
+**`department_staff`** — Department membership + incharge designation (2026-06-19: collapsed `department_incharges` into this table via `is_incharge` boolean. Single source of truth — an incharge IS a member.)
 ```sql
-CREATE TABLE departments_staff (
+CREATE TABLE department_staff (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-  staff_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  staff_profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   school_id UUID NOT NULL REFERENCES schools(id),
-  UNIQUE(department_id, staff_id)
+  is_incharge BOOLEAN NOT NULL DEFAULT false,
+  UNIQUE(department_id, staff_profile_id)
 );
-```
-
-**`department_incharges`** — Department incharge designation
-```sql
-CREATE TABLE department_incharges (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-  staff_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  school_id UUID NOT NULL REFERENCES schools(id),
-  is_active BOOLEAN DEFAULT true,
-  UNIQUE(department_id, staff_id)
-);
+-- Partial index: fast "is this staff the incharge of dept X?" lookups.
+CREATE INDEX idx_department_staff_incharge
+  ON department_staff (department_id, staff_profile_id) WHERE is_incharge = true;
 ```
 
 **`house_staff` / `house_incharges`** — Both keyed by `(house_name, staff_profile_id, school_id)`; `house_incharges` adds no extra columns. Multi-incharge per house is allowed (no UNIQUE on house_name). **Houses entity storage:** Houses stored in `schools.houses` JSON column (`{name, color, emblem_url}`) — four defaults: Red, Blue, Green, Yellow.
@@ -192,7 +184,7 @@ In edit mode, a small `auto-derived` hint is shown next to the role label. To ch
 
 **Subject Picker — bug fixes (2026-06-13):** (1) Pre-fix: flat 156-row list, draft badge showed `"Class 9 - ?"` (subject name missing — consumer label fallback `existing?.subject_name` was `null` for new drafts), post-save label was `"Class 9 B ?"` (read path asked for `subjects(name)` join from `staff_roles` which silently returned `null` since no FK exists). Fix: rewrote picker as 3 cascading dropdowns; consumer builds label from picker payload `(className sectionName — subjectName)` directly; `getSubjectTeachersForStaff` drops the `subjects(name)` join and does a second `section_subjects` query keyed by the unique `subject_id`s, merging `subject_name` client-side. Picker passes `subjectName`, `className`, `sectionName` to the consumer via extended `onPick` signature `(subjectId, classId, sectionId, subjectName, className, sectionName) => void`. (2) **Bug A**: `"more than one relationship was found"` on the existing-assignments query — `staff_roles` has TWO FKs to `profiles` (`staff_id` and `assigned_by`), so the embedded `staff:profiles(full_name)` is ambiguous. Fix: name the FK explicitly — `staff:profiles!staff_roles_staff_id_fkey(full_name)` (verified via `information_schema.table_constraints`). (3) **Bug B**: `"invalid input syntax for type uuid: undefined"` when picking a class — dependent effects re-fetched `academic_sessions` for `session_id` but did NOT destructure `{ data }` from the result, so `sessionData.id` was `undefined` (the result object has `data`/`error` keys, not `id`); the next query sent `session_id: undefined` to a UUID column. Fix: extract `sessionId` once in the initial load, cache in state, reuse in dependent effects; add `sessionId` to dep arrays.
 
-**(g) Department** — Card shows each incharge dept as `👑 {dept_name} — Incharge` and each member-only dept as `{dept_name} — Member`; an incharge-also-member row renders once as the crowned `— Incharge` chip (crown wins, no duplicate). Drawer edits via **two independent single-add dropdowns**: `+ Add member` `<Select>` adds a `— Member` badge, `×` removes from member (cascades to incharge), `↑` promotes to incharge; `+ Add incharge` `<Select>` adds a `👑 — Incharge` badge, `×` demotes (keeps as member). Both dropdowns show only depts not yet in that list (a dept can't be added twice to the same list); `↑` on a member badge adds to incharge list and keeps the member row. **Single render pipeline** (unified 2026-06-15): badges are built from `effectiveMemberIds = union(memberIds, inchargeIds)`, walked in incharge-first order, deduped via a `Set` — one badge per dept, guaranteed. **Cascade rule**: incharge implies member (adding to Incharge auto-adds to Member in both UI and save); removing from Member also removes from Incharge (same save); removing from Incharge only removes the incharge designation (member remains). **Functional setState**: all `setDraftDeptInchargeIds` / `setDraftDeptMemberIds` calls in dropdown handlers and `↑`/`×` buttons use `setX((prev) => ...)` form, so a single event handler can update both lists in the same React batch without one reading stale closure state. Each row in the underlying data is one record with `is_incharge: boolean`. Writes to `departments_staff` + `department_incharges`. The same rows are also editable in the Departments tab (per-dept cards).
+**(g) Department** — Card shows each incharge dept as `👑 {dept_name} — Incharge` and each member-only dept as `{dept_name} — Member`; an incharge-also-member row renders once as the crowned `— Incharge` chip (crown wins, no duplicate). Drawer edits via **two independent single-add dropdowns**: `+ Add member` `<Select>` adds a `— Member` badge, `×` removes from member (cascades to incharge), `↑` promotes to incharge; `+ Add incharge` `<Select>` adds a `👑 — Incharge` badge, `×` demotes (keeps as member). Both dropdowns show only depts not yet in that list (a dept can't be added twice to the same list); `↑` on a member badge adds to incharge list and keeps the member row. **Single render pipeline** (unified 2026-06-15): badges are built from `effectiveMemberIds = union(memberIds, inchargeIds)`, walked in incharge-first order, deduped via a `Set` — one badge per dept, guaranteed. **Cascade rule**: incharge implies member (adding to Incharge auto-adds to Member in both UI and save); removing from Member also removes from Incharge (same save); removing from Incharge only removes the incharge designation (member remains). **Functional setState**: all `setDraftDeptInchargeIds` / `setDraftDeptMemberIds` calls in dropdown handlers and `↑`/`×` buttons use `setX((prev) => ...)` form, so a single event handler can update both lists in the same React batch without one reading stale closure state. Each row in the underlying data is one record with `is_incharge: boolean`. Writes to `department_staff` only (single table — 2026-06-19: incharge flag is a boolean column on the membership row, no separate `department_incharges` table). The same rows are also editable in the Departments tab (per-dept cards).
 
 **(h) House** — Single-value select: 4 houses (from `schools.houses` JSON) + "No house". Writes to `house_staff`. The same value is also editable in the Houses tab (per-house cards).
   - **2026-06-15 fix**: `setHouse` call site was passing `currentUserId` (a profile UUID) as the third arg `schoolId`, causing the FK `house_staff_school_id_fkey` to reject every insert. Fixed: now passes the real `schoolId` (the school UUID) as the 3rd arg, and `currentUserId` as the 4th `changedBy` arg. Signature is `setHouse(staffId, houseName, schoolId, changedBy)`.
@@ -252,9 +244,35 @@ Purpose: Unified staff assignment to wings — coordinators + all teachers in on
 
 ### 3.4 Departments Tab
 
-**Status:** Implementation complete per existing code.
+**Status:** Rebuilt 2026-06-18 for Wings/Houses parity (was the odd one out — table layout with inline Settings + Log buttons, no shared cache, no `useSave*Assignments` mutation). All five role-management tabs now share the same contract: per-card `[Edit] → [Save] → [Cancel]` with drafts, `useSave*Assignments` mutation, `invalidateRoleManagerSchool` for cross-tab freshness.
 
-Department cards show: name, incharge (👑), staff avatars, [Edit] (incharge/staff add/remove).
+**Layout.** 2-column grid of `DepartmentAssignmentCard` (matches Houses). Per card: header (name + Inactive/Active badge + 👑 incharge count + 👤 member count + Expand chevron), expandable body.
+
+**Collapsed card.** Header + counts only. Click chevron to expand.
+
+**Expanded read-only view.** Two sections:
+- `Incharges (N)` — comma-separated incharges each with 👑.
+- `Members (N)` — comma-separated members (incharges suppressed here; an incharge also implies a member but does not double-render).
+
+**Edit mode.** Card footer shows `[Edit]` (read) or `[Cancel] [Save Changes]` (edit). Save disabled when draft empty. In edit mode:
+- `Incharges` strip with `+ Add` popover (search staff, exclude already-added). Chips are amber, × to remove.
+- `Members` strip with `+ Add` popover. Chips are muted, × to remove. Adding a member who is already an incharge is blocked.
+- Adding an incharge implies a member; the `addedIncharges` draft entry will produce both rows on Save (incharge via `addDepartmentMember(..., asIncharge=true)` and member via the same call's `department_staff` insert).
+- Inactive badge appears when `effectiveIncharges.length === 0` (derived from current draft, not the DB).
+
+**Actor Replacement Protocol.** Save with a draft that would leave the dept with zero incharges opens `ActorReplacementDialog`:
+- "Pick Replacement" — staff picker; the picked staff is merged into the draft as a new incharge before Save fires.
+- "I Will Become Incharge" — current user is merged into the draft as a new incharge before Save fires. Hidden when `currentUserId === departingStaffId`.
+- "Cancel" — dialog closes; draft remains; user can adjust and retry.
+
+**Removed in 2026-06-18 rebuild.** Per-dept Settings (gear, messenger JSON editor) + Log (history, `DepartmentLogPanel`). Both surfaces now live exclusively in My School per the `docs/DEPARTMENT.md §1` ownership split:
+- Activity log → My School > Departments tab (`DepartmentLogPanel` import still used by My School).
+- Messenger settings → no UI surface writes it; column is set on create by `DepartmentCreateModal.tsx:53` and is otherwise unused. Safe to deprecate in a future cleanup migration.
+- The `messenger_settings` column itself is unchanged in the DB.
+
+**Sync with Staff tab.** The same data is editable in the Staff tab §3.1.2(g). The Departments tab saves via `useSaveDepartmentAssignments` (`useRoleManagerQueries.ts`) which invalidates `staffList` + broad `staff-roles` prefix + `departments` — so a dept change in this tab updates the Staff tab chips immediately on next visit, and vice versa. Matches Wings/Houses contract.
+
+**Files:** `DepartmentsAssignmentTab.tsx` (parent, owns save orchestration + Actor gate), `DepartmentAssignmentCard.tsx` (per-dept card), `ActorReplacementDialog.tsx` (extracted from the previous inline dialog).
 
 ### 3.5 Houses Tab
 
@@ -282,15 +300,15 @@ Purpose: Assign staff to houses, designate House Incharges. Show stats per house
 
 ### 4.1 Synchronization
 
-Department (member + incharge) is **fully decoupled** from academic roles (Coordinator, Class Teacher, Subject Teacher, House). Assigning a staff as CT/ST in the Subjects tab does **not** auto-insert them into any `departments_staff` row. Making them a Coordinator (in either the Staff tab Wings cell or the Wings tab Edit modal) does **not** auto-insert them into any `departments_staff` row. The two write paths are independent — each entry point writes only to its own table(s):
+Department (member + incharge) is **fully decoupled** from academic roles (Coordinator, Class Teacher, Subject Teacher, House). Assigning a staff as CT/ST in the Subjects tab does **not** auto-insert them into any `department_staff` row. Making them a Coordinator (in either the Staff tab Wings cell or the Wings tab Edit modal) does **not** auto-insert them into any `department_staff` row. The two write paths are independent — each entry point writes only to its own table(s):
 
 | Action | Tab + UI | Writes to | Does NOT touch |
 |---|---|---|---|
-| Assign CT/ST | Subjects tab grid (or Staff tab drawer §3.1.2(e)/(f)) | `staff_roles` (+ auto `wing_staff` if class has wing) | `departments_staff` |
-| Make Coordinator | Wings tab Edit modal (or Staff tab §3.1.2(d)) | `wing_staff` (assignment_type=`coordinator`) | `departments_staff` |
-| Add dept member | Departments tab Edit (or Staff tab §3.1.2(g)) | `departments_staff` | `staff_roles`, `wing_staff`, `house_staff` |
-| Add dept incharge | Departments tab Edit (or Staff tab §3.1.2(g)) | `departments_staff` + `department_incharges` | `staff_roles`, `wing_staff`, `house_staff` |
-| Assign house | Houses tab Edit (or Staff tab §3.1.2(h)) | `house_staff` | `staff_roles`, `wing_staff`, `departments_staff` |
+| Assign CT/ST | Subjects tab grid (or Staff tab drawer §3.1.2(e)/(f)) | `staff_roles` (+ auto `wing_staff` if class has wing) | `department_staff` |
+| Make Coordinator | Wings tab Edit modal (or Staff tab §3.1.2(d)) | `wing_staff` (assignment_type=`coordinator`) | `department_staff` |
+| Add dept member | Departments tab Edit (or Staff tab §3.1.2(g)) | `department_staff` | `staff_roles`, `wing_staff`, `house_staff` |
+| Add dept incharge | Departments tab Edit (or Staff tab §3.1.2(g)) | `department_staff` (sets `is_incharge=true` on the membership row) | `staff_roles`, `wing_staff`, `house_staff` |
+| Assign house | Houses tab Edit (or Staff tab §3.1.2(h)) | `house_staff` | `staff_roles`, `wing_staff`, `department_staff` |
 
 All tabs write to the same source tables within their own domain — changes reflect across the Staff tab, Subjects tab, Wings tab, Departments tab, and Houses tab because each tab reads from the same underlying tables.
 
@@ -374,8 +392,8 @@ DB columns (`is_primary`, `auto_assigned`, `source_type`, `source_reference`) sh
 | Staff | Complete (see 2026-06-15 patch) |
 | Subjects | Complete (see 2026-06-13 patch) |
 | Wings | Spec locked 2026-06-06; implementation per §3.3 |
-| Departments | Complete |
-| Houses | Complete |
+| Departments | Rebuilt 2026-06-18 for Wings/Houses parity (per-card edit/save, draft flow, shared `useSave*Assignments` mutation, broad `staff-roles` invalidation). Settings + Log surfaces removed; ownership moved to My School. |
+| Houses | Rebuilt 2026-06-19 for Departments parity (per-card edit/save, draft flow, `HouseMovePromptDialog` gate per `docs/HOUSE.md §7.1`) |
 
 ### 2026-06-13 Patch — Role Manager (Staff tab + Subjects tab)
 
@@ -420,3 +438,115 @@ DB columns (`is_primary`, `auto_assigned`, `source_type`, `source_reference`) sh
 **Verification:** tsc clean, vitest 15/15 passing, build clean, incharge-also-member row renders once, House save no longer throws FK violation.
 
 **Not in this patch (tracked for follow-up):** `handleAssignStaff` does not write `assigned_by` or `academic_year_id` (Subjects tab handler inconsistency); legacy `class_teachers` / `subject_teachers` tables still being read by the Staff tab card (the "two-table split" refactor from earlier); mobile UX for both tabs (Phase 2).
+
+### 2026-06-18 Patch — Role Manager (Departments tab rebuild for Wings/Houses parity)
+
+**Author:** Claude (Opus 4.7)
+
+**Scope:** The Departments tab was the only Role Manager write surface that had not been migrated to the `useSave*Assignments` contract. It still shipped as a table with per-row Settings (gear → `messenger_settings` dialog) + Log (history → `DepartmentLogPanel`) buttons, an inline `supabase.from(...)` save path, and no cross-tab cache invalidation. Wings, Houses, and Staff had all converged on per-card edit + drafts + `invalidateRoleManagerSchool`. The Departments tab was the odd one out, which made cross-tab fan-out (Dept changes in this tab did not refresh Staff card chips) silently inconsistent.
+
+**Changes.**
+1. **`DepartmentsAssignmentTab.tsx` rewritten** — table → 2-column card grid (parity with `HousesAssignmentTab`). Removed: `History` / `Settings` icon imports; `messenger_settings` JSON editing + RadioGroup dialog; `DepartmentLogPanel` mount + per-dept Log button; inline `supabase.from(...)` save paths. Added: `useSaveDepartmentAssignments` mutation; per-card `DepartmentAssignmentCard` mount; `ActorReplacementDialog` mount; per-card `editingDeptId` tracking so only one card is in edit mode at a time (other cards dim via `opacity-40 pointer-events-none`, matching Houses).
+2. **`DepartmentAssignmentCard.tsx` (new)** — per-dept card with internal `DeptDraft` state, `effectiveIncharges` / `effectiveMembers` `useMemo` (base − removed + added; incharges first to dedupe), `[Edit] / [Cancel] / [Save Changes]` footer matching Wings/Houses, incharge chips (amber + Crown) + member chips (muted + User), `+ Add` `Popover` + `Command` pickers reusing `useAvailableStaffForWing`.
+3. **`ActorReplacementDialog.tsx` (new)** — extracted from the previously-inlined dialog. Props: `deptName`, `departingStaffId`, `departingStaffName`, `currentUserId`, `staffList`, `onPickReplacement`, `onBecomeIncharge`. "I Will Become Incharge" hidden when `currentUserId === departingStaffId`.
+4. **`useSaveDepartmentAssignments(schoolId)` (new mutation, `useRoleManagerQueries.ts`)** — input shape `SaveDepartmentAssignmentsInput { additions: Array<{departmentId, staffId, asIncharge: boolean}>, removals: Array<{departmentId, staffId, role: "incharge" | "member"}> }`. Sequential `addDepartmentMember(..., asIncharge)` / `removeDepartmentIncharge` / `removeDepartmentMember` calls; fail-fast on first error. `onSuccess` invalidates `staffList` + broad `staff-roles` prefix + `departments` (new `departments` flag added to `invalidateRoleManagerSchool`). Matches `useSaveWingAssignments` and `useSaveHouseAssignments` shape.
+5. **Test coverage** — `useSaveDepartmentAssignments.test.ts` (new, 3 tests): three-key invalidation contract on success; dispatch order (additions → incharge/member with `asIncharge` flag, then removals → incharge/member to the right mutator); fail-fast on first error.
+
+**Files changed:** `src/components/role-manager/DepartmentsAssignmentTab.tsx` (full rewrite), `src/components/role-manager/DepartmentAssignmentCard.tsx` (new), `src/components/role-manager/ActorReplacementDialog.tsx` (new), `src/hooks/useRoleManagerQueries.ts` (added `useSaveDepartmentAssignments` + `departments` flag on `invalidateRoleManagerSchool`), `src/test/useSaveDepartmentAssignments.test.ts` (new), `docs/ROLE_MANAGER.md` (§3.4 + Implementation Status table + this section).
+
+**Verification:** tsc clean, vitest 38/40 passing (the 2 failures — `auth.test.tsx` `jest`/`vi` mismatch and `autoAssignment.test.ts` module-hoist issue — are pre-existing on `main` and unrelated). 3 new tests pass. Settings + Log UI surfaces are removed; `messenger_settings` column is still set on create by `DepartmentCreateModal.tsx` and is otherwise unwritten (safe to deprecate in a future migration). The `DepartmentLogPanel` import in My School's `DepartmentsTab.tsx` is untouched and still works.
+
+**Removed surface area:**
+- `DepartmentsAssignmentTab.tsx` — `-S-` Settings column header, gear icon button, `messenger_settings` JSON editing dialog, `openSettings` / `handleSaveSettings`, `settingsDialogOpen` / `settingsDept` / `settingsWhoCanUse` / `settingsVisibility` / `settingsSaving` state, `History` icon import, per-dept Log button, `DepartmentLogPanel` mount, `logPanelOpen` / `logDeptFilter` / `logDeptName` state, `openLog` handler, `pickerOpen` / `pickerType` / `actorPickerOpen` / `actorSearch` state (inline `Command` blocks replaced by per-card popovers), inlined `ActorReplacementDialog` JSX (now extracted).
+
+**Not in this patch (tracked for follow-up):** `messenger_settings` column still exists in DB; My School's `DepartmentCreateModal.tsx:53` still writes the default `{ who_can_use: "incharges_only", visibility: [] }`. No UI surface reads it. If a future cleanup migration drops the column, this default write must be removed too.
+
+### 2026-06-19 Patch — Role Manager (Houses tab rebuild for Departments parity + move-prompt)
+
+**Author:** Claude (Opus 4.7)
+
+**Scope:** The Houses tab was the last role-management surface still using a page-level `isEditing` toggle. All four cards opened their inline-edit sections simultaneously; other cards were dimmed via `opacity-40 pointer-events-none` based on `isEditing && !draft` (a hack, not a gate). Additionally, `assignStaffToHouse` enforces one-house-per-staff at the DB level (pre-deletes the existing row) but the UI never surfaced the move — the staff would silently disappear from the old house on save. `docs/HOUSE.md §7.1` requires a confirmation dialog: *"[Staff] is currently in [Old]. This will move them to [New]. Proceed?"* The Houses tab was the only role-management surface missing this gate.
+
+**Changes.**
+1. **`HouseAssignmentCard.tsx` (new, ~530 lines)** — per-house card mirroring `DepartmentAssignmentCard`. Internal `HouseAssignmentDraft` (addedIncharges/addedStaff/removedInchargeIds/removedStaffIds), `effectiveIncharges` / `effectiveStaff` `useMemo` (base − removed + added; incharges first to dedupe), `[Edit] / [Cancel] / [Save Changes]` footer matching Departments, incharge chips (amber + Crown) + staff chips (muted + User with gender ♂/♀), `+ Add` `Popover` + `Command` picker, expanded read-only body grouped by wing. Collapsed view always renders the stats table (Students | Teachers rows: Total + per-wing with gender counts) per `docs/ROLE_MANAGER.md §3.5`.
+2. **`HousesAssignmentTab.tsx` (rewritten)** — table/page-level `isEditing` → per-card `editingHouseName: string | null`. `drafts: Map<string, HouseAssignmentDraft>` → `dirtyHouseNames: Set<string>` aggregated to `onDirtyChange` (matches Departments pattern: dirty set OR save-pending OR error). Save path: card's `onAttemptSave` → parent's `detectMoves` → `HouseMovePromptDialog` if any cross-house moves detected, else `performSave`. `performSave` calls `saveMutation.mutateAsync` and on success closes edit mode + calls `onAssignmentChange()`. Draft preserved on save failure (user stays in edit mode for retry).
+3. **`HouseMovePromptDialog.tsx` (new, ~85 lines)** — `AlertDialog` with two paths: single-move case renders inline copy, multi-move case renders a bulleted list of `from → to` transitions. "Cancel" closes the dialog and preserves the draft; "Move Staff" fires `onConfirm` and the parent's `performSave` runs. Detection logic: for each `addedIncharges` / `addedStaff` entry, walk the source-of-truth `useHouses` payload; if the staff appears in another house's `incharges` or `staff`, record the move. The DB function `assignStaffToHouse` already handles the move atomically — this dialog is purely a confirmation gate.
+4. **No new query/mutation** — `useHousesWithDetails` + `useSaveHouseAssignments` were already correct (`useRoleManagerQueries.ts:146` and `:409`). Cross-tab invalidation unchanged: save invalidates `staffList` + broad `staff-roles` prefix + `houses` via `invalidateRoleManagerSchool`, so the Staff tab card's `roles.house` chip refreshes on next visit (sync contract preserved).
+
+**Files changed:** `src/components/role-manager/HousesAssignmentTab.tsx` (rewrite, parent orchestrator), `src/components/role-manager/HouseAssignmentCard.tsx` (new), `src/components/role-manager/HouseMovePromptDialog.tsx` (new), `docs/ROLE_MANAGER.md` (Implementation Status table + this section).
+
+**Sync with Staff tab — explicit answer.** The "sync" the user asked about is already in place at three layers, no code change required:
+- **Data layer:** both tabs write to `house_staff` / `house_incharges`. Same tables, same RLS, same `school_id` filter.
+- **Query layer:** `useSaveHouseAssignments.onSuccess` calls `invalidateRoleManagerSchool(qc, schoolId, { broadStaffRoles: true })` which invalidates `roleManagerKeys.staffList(schoolId)` + the school-wide `[...roleManagerKeys.all, "staff-roles", schoolId]` prefix. Every `StaffRoleCard`'s `useStaffRoles` refetches.
+- **UI layer:** `StaffRoleCard` reads `roles.house` (`StaffRoleCard.tsx:967`) and renders the `🏠 {house_name}` chip from the invalidated `useStaffRoles` payload. The chip updates on next mount/refetch of the card.
+
+Switching tabs re-mounts the new tab which re-fetches its data, so the sync is always visible after a tab switch. No event bus, no shared Zustand store, no optimistic-update coordination — the contract is the TanStack Query key factory.
+
+**Removed surface area:**
+- Page-level `isEditing` boolean + `enterEditMode` / `cancelEdit` functions
+- Page-level `drafts: Map<string, HouseAssignmentDraft>` (now owned per-card)
+- `expandedHouses` cleared on `cancelEdit` (was: full reset on page-cancel)
+- `isOtherCardBeingEdited` hack based on `isEditing && !draft` (replaced with `editingHouseName !== null && editingHouseName !== house.definition.name` — proper gate)
+- Inline `StaffCommand` (47-87 of old file) and `genderSymbol` (89-93) — moved into the card, not extracted to a shared module (karpathy §3: surgical, Wings + Departments each have their own)
+- "Staff pool lookup for gender" race at line 202-203 of old file — the card receives the full `HouseStaff` shape with `gender` already populated from the picker pool
+
+**Verification (TODO T7):** tsc clean, full `npm test` (no regressions), manual smoke:
+1. Edit a house → add incharge + 2 staff → Save → toast "House updated", other cards become editable.
+2. Add a staff who is in another house → Save → move-prompt dialog appears with copy "[Staff] is currently in [Old]. This will move them to [New]. Proceed?" → Cancel → draft preserved, dialog closes → Confirm → save fires, staff now in new house, removed from old (atomic via DB function).
+3. Remove the only incharge of a house → Save → succeeds silently (no Actor Replacement dialog, per `docs/HOUSE.md §3` "No minimum Incharge rule").
+4. Switch to Staff tab, then back to Houses → all data fresh (cache invalidation working, Staff card `🏠` chip reflects the new house).
+
+**Not in this patch (tracked for follow-up):**
+- Audit logging (`houses_audit_log` table exists, `logHouseAction` helper is dead code in `HousesTab.tsx`). `docs/ROLE_MANAGER.md §3.1.3` notes audit inserts are not yet wired at all — cross-tab follow-up.
+- In-app notifications on assign/move. `docs/HOUSE.md §11` lists them, but no other Role Manager tab implements them either; out of scope here.
+- Mobile UX. Phase 2 per `§5` #4.
+- Rename/reset from this tab. Owned by My School (`docs/HOUSE.md §1` ownership split).
+
+### 2026-06-19 Hotfix — `assignStaffToHouse` UNIQUE constraint violation
+
+**Author:** Claude (Opus 4.7)
+
+**Scope:** Adding a staff to a house and clicking `Save Changes` failed with a red toast: `Failed to save house staff change: duplicate key value violates unique constraint "house_staff_house_name_staff_profile_id_key"`.
+
+**Root cause:** `assignStaffToHouse` (`src/integrations/supabase/queries/houses.ts`) had a pre-delete that intentionally left a stale `house_staff` row in the target house in place:
+```ts
+// Old — wrong
+delete().eq("staff_profile_id", staffId).eq("school_id", schoolId).neq("house_name", houseName);
+insert({ house_name: houseName, staff_profile_id: staffId, ... });
+```
+The `.neq("house_name", houseName)` clause meant the delete skipped the target house. If a stale row existed in the target house (from a previous failed save, a concurrent edit, or a stale optimistic update), the subsequent `insert` hit the UNIQUE(house_name, staff_profile_id) constraint.
+
+**Fix.** Drop the `.neq()` — one-house-per-staff means one row total per (staff, school), not "one row per house except the target":
+```ts
+// New — correct
+delete().eq("staff_profile_id", staffId).eq("school_id", schoolId);
+insert({ house_name: houseName, staff_profile_id: staffId, ... });
+```
+
+**Files changed:** `src/integrations/supabase/queries/houses.ts` (`assignStaffToHouse` pre-delete clause dropped + comment expanded); `src/test/assignStaffToHouse.test.ts` (new, 2 tests — regression: `deleteNeq` is never called; contract: delete is filtered by staff + school, insert runs with target house; error path: insert error surfaces to caller); `docs/ROLE_MANAGER.md` (this section); `docs/LESSONS.md` (2026-06-19 — "One-house-per-staff means one row total").
+
+**Verification:** tsc clean, vitest 53/55 passing (the 2 failures — `auth.test.tsx` jest/vi mismatch and `autoAssignment.test.ts` module-hoist — are pre-existing on main, unrelated). 2 new tests pass. Manually retest: add staff to House A, then add the same staff to House B — Save fires the move-prompt; on confirm, staff moves cleanly without UNIQUE violation.
+
+### 2026-06-19 Hotfix 2 — `setHouseIncharge` ON CONFLICT spec + `HousesTab` reset clears staff
+
+**Author:** Claude (Opus 4.7)
+
+**Scope:** Two related defects surfaced during the houses-tab smoke test:
+
+1. Adding a staff as a House Incharge and clicking `Save Changes` failed with: `Failed to save house incharge change: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
+2. Resetting a house (My School > Houses tab > Edit > Reset) renamed the house and cleared the emblem but did NOT clear staff assignments. A user who renamed "Red" to "Devil", assigned Gaurav Saxena, then reset saw Gaurav still attached to the house slot.
+
+**Root causes:**
+
+1. `setHouseIncharge` (`src/integrations/supabase/queries/houses.ts`) used an `upsert` with `onConflict: "house_name,staff_profile_id,school_id"`. Per `docs/HOUSE.md §9` DDL, `house_incharges` has `UNIQUE(house_name, school_id)` — single incharge per house — NOT the 3-column UNIQUE. The ON CONFLICT spec did not match any constraint, so Postgres rejected the upsert.
+2. `HousesTab.tsx` `handleConfirmReset` (lines 200-212) only updated the `schools.houses` JSON. Per `docs/HOUSE.md §8`, reset must "remove all staff assignments from that house (including the Incharge designation if set)". The implementation never called any `house_staff` / `house_incharges` delete. Spec drift the original Explore agent flagged in the first read of the codebase.
+
+**Fixes.**
+
+1. **`setHouseIncharge`** — replaced the upsert with a pre-delete + insert pattern (matches `assignStaffToHouse` post-hotfix-1). Pre-delete filters on `(house_name, school_id)`; insert runs with the new incharge.
+2. **`clearHouseAssignments(houseName, schoolId)`** — new helper in `src/integrations/supabase/queries/houses.ts`. Parallel `delete().eq().eq()` on both `house_staff` and `house_incharges`. Idempotent: zero-row deletes return `{ error: null }`. Surfaces errors from either table to the caller.
+3. **`HousesTab.tsx` `handleConfirmReset`** — now `async`; calls `clearHouseAssignments(houseToReset.name, schoolId)` BEFORE the rename (so rows keyed to the OLD name are matched), then renames the slot. On staff-delete failure: aborts the rename and shows the error toast — the slot is NOT renamed if cleanup fails.
+
+**Files changed:** `src/integrations/supabase/queries/houses.ts` (`setHouseIncharge` rewrite + new `clearHouseAssignments`), `src/components/school/HousesTab.tsx` (import + reset handler), `src/test/setHouseIncharge.test.ts` (new, 2 tests), `src/test/clearHouseAssignments.test.ts` (new, 2 tests), `docs/ROLE_MANAGER.md` (this section), `docs/LESSONS.md` (2026-06-19 — "ON CONFLICT spec must match an actual UNIQUE constraint" + "Reset semantics must match the spec, not just the visible state").
+
+**Verification:** tsc clean, vitest 57/59 passing (the 2 failures — `auth.test.tsx` jest/vi mismatch and `autoAssignment.test.ts` module-hoist — are pre-existing on main, unrelated). 4 new tests pass. Manually retest: add a staff as incharge (Save → success, no ON CONFLICT error); reset a house with assignments (all staff rows for that house are deleted before the rename fires).

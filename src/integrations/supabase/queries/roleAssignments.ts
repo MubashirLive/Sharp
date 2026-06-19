@@ -22,6 +22,13 @@ export interface StaffAllRoles {
    * UI should dedup against `coordinator_wings` by wing_id (Coordinator wins).
    */
   auto_assigned_wings: Array<{ id: string; name: string }>;
+  /**
+   * Wings the staff is manually assigned to as a Teacher via the Wings
+   * tab (wing_staff.assignment_type='teacher' AND auto_assigned=false).
+   * Read-only on the Staff card — managed via the Wings tab. UI should
+   * dedup against `coordinator_wings` and `auto_assigned_wings` by wing_id.
+   */
+  manual_teacher_wings: Array<{ id: string; name: string }>;
   class_teachers: Array<{ id: string; class_id: string; section_id: string; class_name: string; section_name: string }>;
   subject_teachers: Array<{ id: string; class_id: string; section_id: string; subject_id: string; class_name: string; section_name: string; subject_name: string; label: string }>;
   departments: Array<{ id: string; department_id: string; department_name: string; is_incharge: boolean }>;
@@ -29,7 +36,7 @@ export interface StaffAllRoles {
 }
 
 export interface WingOption { id: string; name: string }
-export interface ClassOption { id: string; name: string }
+export interface ClassOption { id: string; name: string; wing_id: string | null }
 export interface SectionOption { id: string; name: string }
 export interface DepartmentOption { id: string; name: string }
 export interface HouseOption { name: string; color?: string }
@@ -368,7 +375,17 @@ export async function removeAutoAssignedTeacherFromWing(
     sourceAlive = !!src;
   }
 
-  if (sourceAlive && remainingCTST > 0) {
+  // 2026-06-18 belt-and-braces: if the auto row's source_reference is
+  // dead (points to a missing staff_roles row), treat as orphan and reap
+  // regardless of remainingCTST. Prevents stuck "ghost" wing membership
+  // after direct staff_roles deletions that bypass the standard CT/ST
+  // removal helpers. Live source + live CT/ST elsewhere still keeps the
+  // row (preserves multi-class wing membership).
+  if (!sourceAlive) {
+    await supabase.from("wing_staff").delete().eq("id", (autoRow as any).id);
+    return;
+  }
+  if (remainingCTST > 0) {
     // Staff still has another live CT/ST in the wing — keep the auto row.
     return;
   }
@@ -463,6 +480,32 @@ export async function getAutoAssignedWingsForStaffWithNames(
     .filter((w) => !!w.name);
 }
 
+/**
+ * Get all manual teacher wings for a staff member (assignment_type='teacher'
+ * AND auto_assigned=false). These are wings the staff was added to as a
+ * Teacher via the Wings tab "Add Teacher" button — not auto-derived from a
+ * CT/ST assignment. Surfaces in the Staff tab card so Wings tab writes are
+ * visible on the staff profile. Removal happens via the Wings tab.
+ */
+export async function getManualTeacherWingsForStaff(
+  staffId: string,
+  schoolId: string
+): Promise<Array<{ id: string; name: string }>> {
+  const { data } = await supabase
+    .from("wing_staff")
+    .select("wing_id, wings:wing_id(id, name)")
+    .eq("staff_id", staffId)
+    .eq("school_id", schoolId)
+    .eq("assignment_type", "teacher")
+    .neq("auto_assigned", true);
+  return ((data ?? []) as any[])
+    .map((r) => {
+      const wing = (r as any).wings;
+      return { id: r.wing_id as string, name: (wing?.name as string) ?? "" };
+    })
+    .filter((w) => !!w.name);
+}
+
 // ============== Subject Teacher ==============
 
 export async function addSubjectTeacher(staffId: string, classId: string, sectionId: string, subjectId: string, schoolId: string, academicYearId: string | null, changedBy: string) {
@@ -501,35 +544,35 @@ export async function removeSubjectTeacher(staffRoleId: string, staffId: string,
 }
 
 // ============== Department ==============
+// 2026-06-19: collapsed department_incharges into department_staff. An
+// incharge IS a member — encoded as a boolean flag on the membership row.
+// One row per (staff, department, school).
 
 export async function addDepartmentMember(staffId: string, departmentId: string, schoolId: string, asIncharge: boolean, changedBy: string) {
-  const { error: e1 } = await supabase.from("departments_staff").insert({
-    staff_id: staffId, department_id: departmentId, school_id: schoolId,
-  });
-  if (e1 && !e1.message.includes("duplicate")) throw e1;
-  if (asIncharge) {
-    // 2026-06-15 fix: department_incharges uses staff_profile_id (NOT
-    // staff_id) and has no is_active column. Previous INSERT was silently
-    // failing with "column staff_id does not exist" on Postgres side.
-    const { error: e2 } = await supabase.from("department_incharges").insert({
-      staff_profile_id: staffId, department_id: departmentId, school_id: schoolId,
-    });
-    if (e2 && !e2.message.includes("duplicate")) throw e2;
-  }
+  // Upsert so re-adding a member with asIncharge=true (or flipping a
+  // member to incharge) updates the existing row instead of violating the
+  // UNIQUE(department_id, staff_profile_id) constraint.
+  const { error } = await supabase.from("department_staff").upsert(
+    { staff_profile_id: staffId, department_id: departmentId, school_id: schoolId, is_incharge: asIncharge },
+    { onConflict: "department_id,staff_profile_id", ignoreDuplicates: false },
+  );
+  if (error) throw error;
   await logRoleAudit({ staffId, schoolId, action: "department", field: "add", newValue: `${departmentId}${asIncharge ? ":incharge" : ""}`, changedBy });
 }
 
 export async function removeDepartmentMember(staffId: string, departmentId: string, schoolId: string, changedBy: string) {
-  const { error } = await supabase.from("departments_staff").delete().eq("staff_id", staffId).eq("department_id", departmentId);
+  const { error } = await supabase.from("department_staff").delete().eq("staff_profile_id", staffId).eq("department_id", departmentId);
   if (error) throw error;
-  // 2026-06-15 fix: department_incharges uses staff_profile_id (NOT staff_id)
-  await supabase.from("department_incharges").delete().eq("staff_profile_id", staffId).eq("department_id", departmentId);
   await logRoleAudit({ staffId, schoolId, action: "department", field: "remove", oldValue: departmentId, changedBy });
 }
 
 export async function removeDepartmentIncharge(staffId: string, departmentId: string, schoolId: string, changedBy: string) {
-  // 2026-06-15 fix: department_incharges uses staff_profile_id (NOT staff_id)
-  const { error } = await supabase.from("department_incharges").delete().eq("staff_profile_id", staffId).eq("department_id", departmentId);
+  // Demote: keep the membership row, just clear the flag.
+  const { error } = await supabase
+    .from("department_staff")
+    .update({ is_incharge: false })
+    .eq("staff_profile_id", staffId)
+    .eq("department_id", departmentId);
   if (error) throw error;
   await logRoleAudit({ staffId, schoolId, action: "department", field: "remove_incharge", oldValue: departmentId, changedBy });
 }
@@ -572,7 +615,7 @@ export async function getWingsForSchool(schoolId: string): Promise<WingOption[]>
 }
 
 export async function getClassesForSchool(schoolId: string): Promise<ClassOption[]> {
-  const { data } = await supabase.from("classes").select("id, name").eq("school_id", schoolId).order("display_order");
+  const { data } = await supabase.from("classes").select("id, name, wing_id").eq("school_id", schoolId).order("display_order");
   return (data ?? []) as ClassOption[];
 }
 
@@ -679,21 +722,17 @@ export async function getSubjectTeachersForStaff(staffId: string, schoolId: stri
 }
 
 export async function getDepartmentsForStaff(staffId: string, schoolId: string) {
-  const { data: mem } = await supabase
-    .from("departments_staff")
-    .select("id, department_id, departments(name)")
-    .eq("staff_id", staffId).eq("school_id", schoolId);
-  // 2026-06-15 fix: department_incharges uses staff_profile_id (NOT staff_id)
-  // and has NO is_active column. Previous query hit Postgres with
-  // "column staff_id does not exist" errors and returned no rows.
-  const { data: incharges } = await supabase
-    .from("department_incharges")
-    .select("department_id")
+  // 2026-06-19: single-table read — is_incharge now lives on department_staff.
+  const { data, error } = await supabase
+    .from("department_staff")
+    .select("id, department_id, is_incharge, departments(name)")
     .eq("staff_profile_id", staffId).eq("school_id", schoolId);
-  const inchargeSet = new Set((incharges ?? []).map((i: any) => i.department_id));
-  return (mem ?? []).map((r: any) => ({
-    id: r.id, department_id: r.department_id, department_name: r.departments?.name ?? "?",
-    is_incharge: inchargeSet.has(r.department_id),
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({
+    id: r.id,
+    department_id: r.department_id,
+    department_name: r.departments?.name ?? "?",
+    is_incharge: r.is_incharge,
   }));
 }
 
@@ -708,7 +747,7 @@ export async function getStaffHouseName(staffId: string, schoolId: string): Prom
 // ============== Combined: get all roles for a staff member ==============
 
 export async function getStaffAllRoles(staffId: string, schoolId: string): Promise<StaffAllRoles> {
-  const [profile, coordinator, classTeachers, subjectTeachers, departments, house, autoWings] = await Promise.all([
+  const [profile, coordinator, classTeachers, subjectTeachers, departments, house, autoWings, manualTeacherWings] = await Promise.all([
     supabase.from("profiles").select("role, status, messenger_tag, is_master_admin").eq("id", staffId).single(),
     getWingsForStaff(staffId, schoolId),
     getClassTeachersForStaff(staffId, schoolId),
@@ -716,6 +755,7 @@ export async function getStaffAllRoles(staffId: string, schoolId: string): Promi
     getDepartmentsForStaff(staffId, schoolId),
     getStaffHouseName(staffId, schoolId),
     getAutoAssignedWingsForStaffWithNames(staffId, schoolId),
+    getManualTeacherWingsForStaff(staffId, schoolId),
   ]);
   return {
     staff_id: staffId,
@@ -726,6 +766,7 @@ export async function getStaffAllRoles(staffId: string, schoolId: string): Promi
     messenger_tag: profile.data?.messenger_tag ?? null,
     coordinator_wings: coordinator,
     auto_assigned_wings: autoWings,
+    manual_teacher_wings: manualTeacherWings,
     class_teachers: classTeachers,
     subject_teachers: subjectTeachers,
     departments,

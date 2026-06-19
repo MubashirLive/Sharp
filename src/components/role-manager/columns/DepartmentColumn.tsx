@@ -76,54 +76,60 @@ export function DepartmentColumn({
     const currentUserId = (await supabase.auth.getUser()).data.user?.id ?? "";
     const currentIds = new Set(departments.map((d) => d.department_id));
     const newIds = new Set(selected);
+    const newIncharges = new Set(inchargeSet);
 
-    // Remove depts no longer selected
+    // 2026-06-19: department_staff is the single source of truth — membership
+    // AND incharge designation live on the same row (is_incharge boolean).
+    // Compute desired per (staffId, deptId) state, then issue delete / upsert /
+    // update against department_staff only.
+
+    // 1. Remove depts no longer in the selection.
     const toRemove = [...currentIds].filter((id) => !newIds.has(id));
     if (toRemove.length) {
-      await supabase
+      const { error } = await supabase
         .from("department_staff")
         .delete()
         .eq("staff_profile_id", staffId)
         .in("department_id", toRemove);
+      if (error) throw error;
     }
 
-    // Add new depts
+    // 2. Add new memberships (is_incharge = whether dept is in inchargeSet).
     const toAdd = [...newIds].filter((id) => !currentIds.has(id));
     if (toAdd.length) {
-      await supabase.from("department_staff").insert(
+      const { error } = await supabase.from("department_staff").insert(
         toAdd.map((deptId) => ({
           staff_profile_id: staffId,
           department_id: deptId,
           school_id: schoolId,
+          is_incharge: newIncharges.has(deptId),
           assigned_by: currentUserId,
         }))
       );
+      if (error) throw error;
     }
 
-    // Handle incharges
-    const currentIncharges = new Set(departments.filter((d) => d.is_incharge).map((d) => d.department_id));
-    const newIncharges = new Set(inchargeSet);
-
-    const toRemoveIncharge = [...currentIncharges].filter((id) => !newIncharges.has(id));
-    if (toRemoveIncharge.length) {
-      await supabase
-        .from("department_incharges")
-        .delete()
+    // 3. Flip is_incharge on existing rows where the designation changed.
+    const toPromote = [...newIncharges].filter((id) => currentIds.has(id) && !departments.find((d) => d.department_id === id && d.is_incharge));
+    if (toPromote.length) {
+      const { error } = await supabase
+        .from("department_staff")
+        .update({ is_incharge: true })
         .eq("staff_profile_id", staffId)
-        .in("department_id", toRemoveIncharge);
+        .in("department_id", toPromote);
+      if (error) throw error;
     }
 
-    const toAddIncharge = [...newIncharges].filter((id) => !currentIncharges.has(id));
-    if (toAddIncharge.length) {
-      await supabase.from("department_incharges").insert(
-        toAddIncharge.map((deptId) => ({
-          staff_profile_id: staffId,
-          department_id: deptId,
-          school_id: schoolId,
-          is_active: true,
-          assigned_by: currentUserId,
-        }))
-      );
+    const toDemote = [...currentIds]
+      .filter((id) => newIds.has(id) && !newIncharges.has(id))
+      .filter((id) => departments.find((d) => d.department_id === id && d.is_incharge));
+    if (toDemote.length) {
+      const { error } = await supabase
+        .from("department_staff")
+        .update({ is_incharge: false })
+        .eq("staff_profile_id", staffId)
+        .in("department_id", toDemote);
+      if (error) throw error;
     }
 
     setSaving(false);

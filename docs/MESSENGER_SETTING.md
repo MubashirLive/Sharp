@@ -1,7 +1,7 @@
 # SHARP - Messenger Settings
 
-> Last updated: May 2026
-> Status: Planning draft. This file defines Messenger defaults, configurable settings, and permission behavior.
+> Last updated: 2026-06-17
+> Status: 📝 Spec only. This file defines Messenger defaults, configurable settings, and permission behavior. Settings UI is not yet built — defaults are currently hardcoded in `src/pages/Messenger.tsx` and enforced by RLS.
 
 ---
 

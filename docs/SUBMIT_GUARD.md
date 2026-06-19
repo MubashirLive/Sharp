@@ -1,52 +1,51 @@
-# Submit Guard — Mandatory pattern for all mutation buttons
+# Submit Guard
+
+> Mandatory pattern for all mutation buttons. Added June 2026 after two production double-submit bugs in one week. Server replay via `idempotency_key` introduced in migration `20260604000000_idempotency_keys.sql`.
 
 ## Why
 
-Two production bugs in June 2026 were caused by `useState`-disabled buttons:
+Two production bugs in June 2026:
+1. **Staff "Next"** (`src/components/staff/StaffForm.tsx`) — no `disabled` prop. Two clicks created two staff IDs.
+2. **Classes "Save"** (`src/components/onboarding/ClassesStep.tsx`) — `disabled={isSaving}` lags React commit by one render. Two rapid clicks inserted duplicate classes (2 → 4).
 
-1. **Staff "Next"** (`src/components/staff/StaffForm.tsx`) — no `disabled` prop at all. Clicking Next during staff creation fired `createStaffAuthUser()` twice and created two staff IDs.
-2. **Classes "Save"** (`src/components/onboarding/ClassesStep.tsx`) — `disabled={isSaving}` but the state-driven `disabled` prop lags React's commit by one render. Two rapid clicks both passed the check and inserted the same draft classes twice — 2 classes became 4.
-
-The same `useRef` synchronous lock pattern was already implemented in `useClassesEditor.ts` to fix a previous bug — it just wasn't reused.
+The `useRef` synchronous lock pattern was already used in `useClassesEditor.ts` — wasn't reused elsewhere.
 
 ## Client rules (mandatory)
 
-1. Every button that triggers a Supabase mutation **MUST** use `<SubmitButton>` from `@/components/ui/submit-button` **OR** `useGuardedSubmit()` from `@/hooks/useGuardedSubmit`.
-2. `useState`-only `saving` / `isSubmitting` / `processing` flags without a `useRef` lock are **forbidden** for mutation handlers.
-3. React Query's `mutation.isPending` is acceptable (it flips synchronously inside `mutate()`), but `<SubmitButton>` is preferred for consistency.
-
-### Which primitive to use
+1. Every Supabase mutation button **MUST** use `<SubmitButton>` from `@/components/ui/submit-button` **OR** `useGuardedSubmit()` from `@/hooks/useGuardedSubmit`.
+2. `useState`-only `saving`/`isSubmitting`/`processing` flags without a `useRef` lock are **forbidden**.
+3. React Query's `mutation.isPending` is acceptable (flips synchronously inside `mutate()`), but `<SubmitButton>` is preferred.
 
 | Trigger shape | Use |
 |---|---|
 | One button → one async handler | `<SubmitButton onClick={fn}>` |
-| Form `onSubmit`, dialog footer Buttons, imperative handle from `useImperativeHandle` | `useGuardedSubmit()` + manual `disabled` wiring |
-| RHF `handleSubmit` wrapping | `useGuardedSubmit()` (wrap the submit function) |
-| React Query `mutate()` already in use | Leave `disabled={mutation.isPending}` (synchronous flip) |
+| Form `onSubmit`, dialog footer, `useImperativeHandle` | `useGuardedSubmit()` + manual `disabled` |
+| RHF `handleSubmit` wrapping | `useGuardedSubmit()` wrapping the submit |
+| React Query `mutate()` already in use | `disabled={mutation.isPending}` |
 
 ## Server rules (mandatory)
 
-1. Every write edge function **MUST** require `idempotency_key` (UUID) in the request body.
-2. The client generates the UUID **once per submission attempt** and stores it in a `useRef`. The key is **cleared only on success** — a failed attempt retains the same key so the next attempt replays any cached response.
-3. The server replays the cached response on key reuse. **Do NOT cache 5xx responses** — they must be retryable with a fresh key.
-4. Cached responses expire after 24 hours (configurable in the migration). Run `purge_expired_idempotency_keys()` nightly.
+1. Every write edge function **MUST** require `idempotency_key` (UUID) in body.
+2. Client generates UUID once per submission attempt, stores in `useRef`. Cleared only on success — failed attempt retains key for replay.
+3. Server replays cached response on key reuse. **Do NOT cache 5xx** — must be retryable with fresh key.
+4. Cached responses expire after 24h. Run `purge_expired_idempotency_keys()` nightly.
 
-## What the lint catches
+## Lint catch
 
-ESLint custom rule `no-unprotected-async-click` (warn, then error after the project-wide migration): flags `<Button onClick={async …}>` with no `disabled` prop. `<SubmitButton>` is excluded (it guards itself).
+ESLint rule `no-unprotected-async-click` flags `<Button onClick={async …}>` with no `disabled` prop. `<SubmitButton>` is excluded.
 
 ## Forbidden patterns
 
 - `<Button onClick={asyncFn}>` with no `disabled` prop
-- `<Button onClick={asyncFn} disabled={!form.formState.isValid}>` (form validity ≠ in-flight)
-- `setSaving(true); await mutate(); setSaving(false)` without a `useRef` lock
+- `<Button onClick={asyncFn} disabled={!form.formState.isValid}>` (validity ≠ in-flight)
+- `setSaving(true); await mutate(); setSaving(false)` without `useRef` lock
 - Edge function write path without `idempotency_key` lookup
-- Generating a new UUID per click instead of per submission attempt
+- Generating new UUID per click instead of per submission attempt
 
-## Worked example — correct pattern
+## Correct pattern
 
 ```tsx
-// In src/components/staff/StaffForm.tsx
+// src/components/staff/StaffForm.tsx
 const { run: runNext, isPending: isGeneratingId } = useGuardedSubmit();
 const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -55,8 +54,7 @@ const handleNext = () => {
     void runNext(async () => {
       if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
       const result = await createStaffAuthUser({ ..., idempotencyKey: idempotencyKeyRef.current });
-      // success → clear so future re-attempt gets a fresh key
-      idempotencyKeyRef.current = null;
+      idempotencyKeyRef.current = null; // success → fresh key next time
     });
   }
 };
@@ -64,6 +62,6 @@ const handleNext = () => {
 return <SubmitButton onClick={handleNext} loadingLabel="Creating Staff ID…">Next</SubmitButton>;
 ```
 
-## When this rule was added
+## Origin
 
-June 2026 — after the second double-submit bug in the same week. Migration `20260604000000_idempotency_keys.sql` introduced the server-side replay cache. Hook + wrapper introduced as `useGuardedSubmit` and `<SubmitButton>`. Officially documented in this file and codified in `CLAUDE.md` Anti-Patterns.
+June 2026 — after second double-submit bug same week. Migration `20260604000000_idempotency_keys.sql` introduced server-side replay cache. Hook + wrapper: `useGuardedSubmit` and `<SubmitButton>`. Codified in `CLAUDE.md` Anti-Patterns.

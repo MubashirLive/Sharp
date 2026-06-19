@@ -1,7 +1,7 @@
 # House Tab — Feature Specification
 ### Module: My School > House Tab
 ### Version: 1.0 (First Release)
-### Status: In Progress
+### Status: ✅ Built. Implemented in `src/components/school/HousesTab.tsx`. Defaults (Red/Blue/Green/Yellow) seeded via `20260515000000_houses.sql`. Per-staff house assignment via `house_staff` junction.
 
 ---
 

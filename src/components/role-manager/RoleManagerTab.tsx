@@ -209,7 +209,6 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
         <SubjectAssignmentGrid
           schoolId={schoolId}
           canEdit={canEdit}
-          onAssignmentChange={async () => { await refreshStaff(); }}
           onDirtyChange={(d) => setTabDirty("subjects", d)}
         />
       </TabsContent>

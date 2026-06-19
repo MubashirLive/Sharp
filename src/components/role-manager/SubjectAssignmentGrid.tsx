@@ -5,34 +5,51 @@
 // persists immediately).
 //
 // 2026-06-13 bug fixes (see docs/ROLE_MANAGER.md §3.2):
-//   - `handleAssignStaff` now destructures `{ error }` and `throw error` on
-//     every supabase call. Previously errors were silently swallowed, so RLS
-//     rejects / exclusion-constraint hits / FK violations left the cell
-//     unchanged with no toast.
+//   - `handleAssignStaff` (now in useSaveSubjectAssignment) destructures
+//     `{ error }` and `throw error` on every supabase call. Previously
+//     errors were silently swallowed, so RLS rejects / exclusion-constraint
+//     hits / FK violations left the cell unchanged with no toast.
 //   - Added `busyKeys: Set<string>` per-cell busy state. While a cell is
 //     mid-save, the cell shows a Loader2 spinner + "Saving" and clicks are
 //     disabled. Prevents double-click races that could trigger the EXCLUSION
 //     constraints `one_class_teacher_per_section` /
 //     `one_subject_per_class_section`.
 //
+// 2026-06-18 refactor:
+//   - Save body lifted into `useSaveSubjectAssignment` (see
+//     `useRoleManagerQueries.ts`). The hook's `onSuccess` invalidates
+//     `staffList` + the broad `staff-roles` prefix + `wings` + `subjects`,
+//     matching the Houses / Wings contract. The old inline save only
+//     invalidated `staffList`, so Staff cards stayed stale until a page
+//     refresh.
+//
 // The Staff tab writes to the same `staff_roles` table (via addSubjectTeacher
 // on card Save) — the two flows are intentionally independent per spec §3.4.
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Loader2, Plus, X, User } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { autoAssignTeacherToWing, removeAutoAssignedTeacherFromWing } from "@/integrations/supabase/queries/roleAssignments";
-import { useStaffList, useSubjects } from "@/hooks/useRoleManagerQueries";
+import {
+  useStaffList,
+  useSubjects,
+  useSaveSubjectAssignment,
+} from "@/hooks/useRoleManagerQueries";
 
 interface SubjectAssignmentGridProps {
   schoolId: string;
   canEdit: boolean;
-  onAssignmentChange: () => void;
+  /**
+   * Optional cross-tab refresh hook. Not used by the Subject tab itself —
+   * `useSaveSubjectAssignment.onSuccess` invalidates staffList / staffRoles
+   * (narrow) / wings / subjects directly. Kept on the type for compatibility
+   * with other Role Manager tabs (Houses, Departments) that still rely on
+   * the parent callback pattern.
+   */
+  onAssignmentChange?: () => void;
   /**
    * Notify the parent (RoleManagerTab) that this tab has unsaved changes.
    * For this auto-save tab: dirty = a save is in-flight OR the last save
@@ -193,14 +210,19 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange, o
     );
   };
 
-  // Real-time save assignment
+  // Real-time save assignment — delegates to useSaveSubjectAssignment so the
+  // cross-tab cache invalidation contract (staffList + staff-roles prefix +
+  // wings + subjects) matches Houses/Wings. Without the hook the Subjects
+  // tab only refreshed its own data, leaving every Staff card stale until
+  // a full page reload.
+  const saveMutation = useSaveSubjectAssignment(schoolId);
+
   const handleAssignStaff = async (
     sectionId: string,
     subjectId: string | null,
     staff: { id: string; full_name: string } | null
   ) => {
     const section = sections.find((s) => s.id === sectionId);
-    const isClassTeacher = subjectId === null;
     const classId = section?.class?.id ?? "";
     if (!classId) {
       toast.error("Section is missing class info; cannot assign");
@@ -212,154 +234,30 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange, o
     setBusyKeys((prev) => new Set(prev).add(key));
     setSaveStatus("saving");
 
+    const isClassTeacher = subjectId === null;
+    // Capture the prior teacher for the same cell so the hook can clean up
+    // the old auto-assigned wing entry on switch / remove.
+    const existing = isClassTeacher
+      ? assignments.find((a) => a.section_id === sectionId && a.role_type === "class_teacher")
+      : assignments.find(
+          (a) =>
+            a.section_id === sectionId &&
+            a.subject_id === subjectId &&
+            a.role_type === "subject_teacher"
+        );
+
     try {
-      // Helper: remove auto-assigned wing entry for a given class
-      const removeWingAutoAssign = async (targetStaffId: string, targetClassId: string) => {
-        try {
-          await removeAutoAssignedTeacherFromWing(targetStaffId, targetClassId, schoolId);
-        } catch (wingErr) {
-          console.warn("Wing auto-unassign failed:", wingErr);
-        }
-      };
-
-      if (!staff) {
-        if (isClassTeacher) {
-          // Capture classId before delete
-          const existing = assignments.find(a => a.section_id === sectionId && a.role_type === "class_teacher");
-          const existingClassId = section?.class?.id ?? "";
-          const { error } = await supabase
-            .from("staff_roles")
-            .delete()
-            .eq("school_id", schoolId)
-            .eq("class_id", existingClassId)
-            .eq("section_id", sectionId)
-            .eq("role_type", "class_teacher");
-          if (error) throw error;
-          if (existing?.staff_id) {
-            await removeWingAutoAssign(existing.staff_id, existingClassId);
-          }
-        } else if (subjectId) {
-          // Capture classId before delete
-          const existing = assignments.find(a => a.section_id === sectionId && a.subject_id === subjectId && a.role_type === "subject_teacher");
-          const existingClassId = section?.class?.id ?? "";
-          const { error } = await supabase
-            .from("staff_roles")
-            .delete()
-            .eq("school_id", schoolId)
-            .eq("class_id", existingClassId)
-            .eq("section_id", sectionId)
-            .eq("subject_id", subjectId)
-            .eq("role_type", "subject_teacher");
-          if (error) throw error;
-          if (existing?.staff_id) {
-            await removeWingAutoAssign(existing.staff_id, existingClassId);
-          }
-        }
-      } else {
-        // 1) Remove pre-existing row that would collide on the EXCLUSION
-        //    constraint when switching to a new teacher.
-        if (isClassTeacher) {
-          // Find the old assignment to get its staffId for wing cleanup
-          const oldAssignment = assignments.find(a => a.section_id === sectionId && a.role_type === "class_teacher");
-          const { error } = await supabase
-            .from("staff_roles")
-            .delete()
-            .eq("school_id", schoolId)
-            .eq("class_id", classId)
-            .eq("section_id", sectionId)
-            .eq("role_type", "class_teacher")
-            .neq("staff_id", staff.id);
-          if (error) throw error;
-          // Remove old teacher's auto-assigned wing entry
-          if (oldAssignment?.staff_id && oldAssignment.staff_id !== staff.id) {
-            await removeWingAutoAssign(oldAssignment.staff_id, classId);
-          }
-        } else if (subjectId) {
-          const oldAssignment = assignments.find(a => a.section_id === sectionId && a.subject_id === subjectId && a.role_type === "subject_teacher");
-          const { error } = await supabase
-            .from("staff_roles")
-            .delete()
-            .eq("school_id", schoolId)
-            .eq("class_id", classId)
-            .eq("section_id", sectionId)
-            .eq("subject_id", subjectId)
-            .eq("role_type", "subject_teacher")
-            .neq("staff_id", staff.id);
-          if (error) throw error;
-          if (oldAssignment?.staff_id && oldAssignment.staff_id !== staff.id) {
-            await removeWingAutoAssign(oldAssignment.staff_id, classId);
-          }
-        }
-
-        // 2) Upsert chosen assignment. UNIQUE onConflict keeps same-teacher
-        //    re-selection idempotent.
-        const { data: upserted, error } = await supabase
-          .from("staff_roles")
-          .upsert({
-            staff_id: staff.id,
-            school_id: schoolId,
-            role_type: isClassTeacher ? "class_teacher" : "subject_teacher",
-            class_id: classId,
-            section_id: sectionId,
-            subject_id: subjectId ?? null,
-          }, {
-            onConflict: "staff_id, role_type, class_id, section_id, subject_id",
-          })
-          .select("id")
-          .single();
-        if (error) throw error;
-
-        // 3) Auto-assign to wing if class has one (graceful: don't fail save)
-        if (upserted?.id) {
-          try {
-            await autoAssignTeacherToWing(
-              staff.id,
-              classId,
-              schoolId,
-              upserted.id,
-              isClassTeacher ? "class_teacher" : "subject_teacher"
-            );
-          } catch (wingErr) {
-            // Auto-assign failure must not roll back the successful save.
-            console.warn("Wing auto-assign failed:", wingErr);
-          }
-        }
-      }
-
-      // 3) Audit (best-effort; if auth user missing, skip but don't fail)
-      const { data: authData } = await supabase.auth.getUser();
-      const changedBy = authData?.user?.id;
-      if (changedBy) {
-        const action = isClassTeacher ? "class_teacher" : "subject_teacher";
-        const field = staff ? "add" : "remove";
-        const targetStaffId = staff?.id ?? null;
-        try {
-          await supabase.from("staff_role_audit").insert({
-            staff_id: targetStaffId,
-            school_id: schoolId,
-            action,
-            field,
-            new_value: targetStaffId,
-            changed_by: changedBy,
-          });
-        } catch {
-          // Audit failure must not roll back the successful save.
-        }
-      }
-
-      // Refresh assignments
-      // 2026-06-15 fix: explicit FK name (see loadData's comment)
-      const { data: assignmentsData } = await supabase
-        .from("staff_roles")
-        .select(`
-          id, role_type, section_id, subject_id, staff_id,
-          staff:profiles!staff_roles_staff_id_fkey(full_name)
-        `)
-        .eq("school_id", schoolId);
-
-      setAssignments(assignmentsData ?? []);
+      await saveMutation.mutateAsync({
+        schoolId,
+        isClassTeacher,
+        sectionId,
+        classId,
+        subjectId,
+        staff: staff ? { id: staff.id } : null,
+        existingStaffId: existing?.staff_id ?? null,
+      });
       setSaveStatus("idle");
-      onAssignmentChange();
+      onAssignmentChange?.();
     } catch (e: any) {
       toast.error(`Failed to save assignment: ${e?.message ?? "unknown"}`);
       setSaveStatus("error");

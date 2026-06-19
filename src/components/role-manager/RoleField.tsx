@@ -11,8 +11,8 @@ export type DerivedRole = "Academic" | "Non-Academic" | "Both" | "—";
  *
  * No stored value, no override. To change role, change assignments.
  */
-export function deriveRole(roles: Pick<StaffAllRoles, "coordinator" | "class_teachers" | "subject_teachers" | "departments" | "house">): DerivedRole {
-  const hasAcademic = !!roles.coordinator || roles.class_teachers.length > 0 || roles.subject_teachers.length > 0 || !!roles.house;
+export function deriveRole(roles: Pick<StaffAllRoles, "coordinator_wings" | "class_teachers" | "subject_teachers" | "departments" | "house">): DerivedRole {
+  const hasAcademic = roles.coordinator_wings.length > 0 || roles.class_teachers.length > 0 || roles.subject_teachers.length > 0 || !!roles.house;
   const hasNonAcademic = roles.departments.length > 0;
   if (hasAcademic && hasNonAcademic) return "Both";
   if (hasAcademic) return "Academic";
@@ -23,10 +23,16 @@ export function deriveRole(roles: Pick<StaffAllRoles, "coordinator" | "class_tea
 interface RoleFieldProps {
   roles: StaffAllRoles;
   showHint?: boolean;
+  /**
+   * If provided, overrides the derived role with a pre-computed value.
+   * Use this when the caller has draft state that should be reflected
+   * immediately (e.g. live role pill during edit mode).
+   */
+  overrideRole?: DerivedRole;
 }
 
-export function RoleField({ roles, showHint }: RoleFieldProps) {
-  const role = deriveRole(roles);
+export function RoleField({ roles, showHint, overrideRole }: RoleFieldProps) {
+  const role = overrideRole ?? deriveRole(roles);
   const colorClass =
     role === "Both" ? "bg-violet-50 text-violet-700 border-violet-200"
     : role === "Academic" ? "bg-blue-50 text-blue-700 border-blue-200"

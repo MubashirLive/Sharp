@@ -600,38 +600,38 @@ Never use `outline: none` without replacement focus indicator.
 
 ## 15. Implementation Roadmap
 
-### Phase 1: Foundation (Now)
-- [x] CSS variable system — **DONE** (`index.css` lines 18–131)
-- [x] Plus Jakarta Sans import — **DONE**
-- [x] Claymorphism utility classes — **DONE** (`.clay-*` classes)
-- [ ] Audit all hardcoded colors → replace with CSS variables
-- [ ] Audit all hardcoded font-sizes → replace with Tailwind type scale
-- [ ] Replace all hardcoded `shadow-*` → use `--shadow-*` variables
+### Phase 1 — Foundation (DONE)
+- [x] CSS variable system (`index.css` lines 18–131)
+- [x] Plus Jakarta Sans import
+- [x] Claymorphism utility classes (`.clay-*`)
+- [ ] Audit hardcoded colors → CSS variables
+- [ ] Audit hardcoded font-sizes → Tailwind type scale
+- [ ] Replace hardcoded `shadow-*` → `--shadow-*` variables
 
-### Phase 2: Component Audit (Next Sprint)
-- [ ] Button: confirm all variants match spec
-- [ ] Card: confirm stat card has gradient top bar
-- [ ] Input: confirm focus ring uses `box-shadow` not `outline`
-- [ ] Table: confirm row height ≥ 52px
-- [ ] Dialog: confirm uses `.dark .clay-dialog-content` variant
-- [ ] Avatar: add ring shadow (see spec above)
+### Phase 2 — Component audit (next sprint)
+- [ ] Button: all variants match spec
+- [ ] Card: stat card has gradient top bar
+- [ ] Input: focus ring uses `box-shadow` not `outline`
+- [ ] Table: row height ≥ 52px
+- [ ] Dialog: uses `.dark .clay-dialog-content` variant
+- [ ] Avatar: ring shadow per spec
 
-### Phase 3: Premium Touches
-- [ ] Skeleton shimmer animation for loading states
+### Phase 3 — Premium touches
+- [ ] Skeleton shimmer for loading states
 - [ ] Staggered entrance animation for list items
 - [ ] Badge pulse animation for unread notifications
 - [ ] Page transition: fade + slight translate (300ms)
-- [ ] Micro-interaction: stat counter animation on mount
+- [ ] Stat counter animation on mount
 
-### Phase 4: Polish
-- [ ] Custom scrollbar (thin, violet-tinted, matching dark/light)
+### Phase 4 — Polish
+- [ ] Custom scrollbar (thin, violet-tinted, light/dark)
 - [ ] `::selection` color: `hsl(262 83% 58% / 0.25)`
-- [ ] Smooth scroll behavior on `<html>`
+- [ ] Smooth scroll on `<html>`
 - [ ] Backdrop blur on modal overlay
-- [ ] Custom focus ring (`:focus-visible`) — always violet ring
+- [ ] Custom focus ring (`:focus-visible`) — always violet
 
-### Phase 5: Documentation
-- [ ] Storybook for all components (shadcn Storybook template)
+### Phase 5 — Documentation
+- [ ] Storybook for all components
 - [ ] Figma token export (if design handoff needed)
 - [ ] Per-page design notes in `docs/`
 

@@ -6,6 +6,7 @@ import { Loader2, Pencil, History, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { toTitleCase } from "@/lib/text-utils";
+import { clearHouseAssignments } from "@/integrations/supabase/queries/houses";
 import { HouseLogPanel } from "./HouseLogPanel";
 
 interface House {
@@ -197,10 +198,25 @@ export function HousesTab({ schoolId, canEdit }: HousesTabProps) {
     setResetDialogOpen(true);
   };
 
-  const handleConfirmReset = () => {
+  const handleConfirmReset = async () => {
     if (editingIndex === null) return;
     const houseToReset = houses[editingIndex];
     const defaultHouse = DEFAULT_HOUSES[editingIndex];
+    // Clear staff assignments for the CURRENT house name (before the
+    // rename) per docs/HOUSE.md §8 — "removes all staff assignments
+    // including the Incharge designation". Then rename + clear emblem.
+    // We clear BEFORE the rename so the rows keyed to the old name are
+    // matched. The data flow then invalidates the Role Manager > Houses
+    // tab cache via the schools update + the staff delete (no need for an
+    // extra invalidation here — TanStack Query refetches useHouses on the
+    // next mount/refetch).
+    try {
+      await clearHouseAssignments(houseToReset.name, schoolId);
+    } catch (e: any) {
+      console.error("Failed to clear house assignments on reset:", e);
+      toast.error(e?.message ?? "Failed to clear staff assignments — house name not reset");
+      return;
+    }
     const updatedHouses = houses.map((h, i) =>
       i === editingIndex ? { ...h, name: defaultHouse.name, emblem_url: "" } : h
     );

@@ -1,175 +1,107 @@
 # Cross-Module Integration Contracts
 
-## Purpose
+> Shared-state rules between modules that edit or consume the same school data.
+> When two modules provide different gateways to the same state, they must not create duplicate records or independent copies. They must read and write the same canonical assignment store.
 
-This file defines shared-state rules between modules that edit or consume the same school data.
-
-When two modules provide different gateways to the same state, they must not create duplicate records or independent copies. They must read and write the same canonical assignment store.
+---
 
 ## Academic Assignment Contract
 
-### Covered Assignments
-
-This contract covers:
+### Covered
 
 - Subject Teacher assignment
 - Class Teacher assignment
 
-### Editing Gateway
+### Editing gateway
 
-The sole editing gateway is **Role Manager** (My Staff > Roles tab).
+**Sole editor: Role Manager** (My Staff > Roles tab). Subject Tab (My School) is now **read-only display** of subject assignments. All subject and class teacher assignment changes are made via Role Manager.
 
-The Subject Tab (My School) is now a **read-only display** of subject assignments. It does not write. All subject and class teacher assignment changes are made via Role Manager.
-
-| Gateway | Editing Style | Primary User Mental Model |
+| Gateway | Editing style | Mental model |
 |---|---|---|
 | Role Manager | Staff-wise | "What roles and teaching assignments does this staff member hold?" |
-| Subject Tab | Read-only display | "What subjects are being taught in each class-section?" |
+| Subject Tab | Read-only | "What subjects are being taught in each class-section?" |
 
-## Subject Teacher Assignment
+### Subject Teacher assignment
 
-A Subject Teacher assignment connects:
-
-- School
-- Academic session
-- Wing, derived from class
-- Class
-- Section
-- Subject
-- Staff member
+Connects: School · Academic session · Wing (derived from class) · Class · Section · Subject · Staff
 
 Rules:
+- One Class + Section + Subject has one Subject Teacher
+- One staff can hold many assignments
+- Co-teaching not supported
+- Reassignment replaces the previous teacher only after explicit confirmation
 
-- One Class + Section + Subject has one Subject Teacher.
-- One staff member can hold many Subject Teacher assignments.
-- Co-teaching is not supported.
-- Reassignment replaces the previous teacher only after explicit confirmation.
+Confirmation text must include: existing teacher, replacement teacher, class, section, subject, downstream modules affected.
 
-Required confirmation text must include:
+### Class Teacher assignment
 
-- Existing teacher
-- Replacement teacher
-- Class
-- Section
-- Subject
-- Downstream modules affected
-
-## Class Teacher Assignment
-
-A Class Teacher assignment connects:
-
-- School
-- Academic session
-- Wing, derived from class
-- Class
-- Section
-- Staff member
+Connects: School · Academic session · Wing (derived from class) · Class · Section · Staff
 
 Rules:
+- One Class + Section has one Class Teacher
+- One staff can hold only one Class Teacher assignment at a time (unless future setting allows multiple)
+- Reassignment replaces the previous Class Teacher only after explicit confirmation
+- Staff can be both Class Teacher and Subject Teacher
 
-- One Class + Section has one Class Teacher.
-- One staff member can hold only one Class Teacher assignment at a time unless a future school setting allows multiple.
-- Reassignment replaces the previous Class Teacher only after explicit confirmation.
-- A staff member can be both Class Teacher and Subject Teacher.
+### Automatic wing membership
 
-## Automatic Wing Membership
+When a staff is assigned as Subject Teacher or Class Teacher:
+1. Resolve the class's current wing from Wing tab / class `wing_id`
+2. If wing exists, add the staff to that wing's read-only teacher membership
+3. If no wing, save the assignment without wing membership
+4. If the class later moves to another wing, the staff's displayed wing membership follows the class
 
-When a staff member is assigned as Subject Teacher or Class Teacher:
+Wing membership created by Subject/Class Teacher is not manually editable from Wing. Wing tab only displays: Teacher name · Class-section-subject (Subject) · Class-section (Class) · Assignment type.
 
-1. Resolve the class's current wing from the Wing tab / class `wing_id`.
-2. If the class has a wing, add the staff member to that wing's read-only teacher membership.
-3. If the class has no wing, save the assignment without wing membership.
-4. If the class later moves to another wing, the staff member's displayed wing membership follows the class.
+Examples: `Rajesh Kumar - Class 8A Mathematics` · `Priya Sharma - Class Teacher 5B` · `Anita Verma - Class 11 Commerce Accountancy`
 
-Wing membership created by Subject Teacher or Class Teacher assignment is not manually editable from Wing.
+Activity Staff with no Class/Subject Teacher assignment displays as: `Activity Staff - Non-assigned`.
 
-The Wing tab only displays:
+### Removal rules
 
-- Teacher name
-- Class-section-subject mapping for Subject Teacher
-- Class-section mapping for Class Teacher
-- Assignment type
+When Subject Teacher assignment removed:
+- Remove only that Class + Section + Subject mapping
+- Keep the staff in the wing if they still have another Subject/Class Teacher/Coordinator/Activity Staff assignment in that wing
+- Remove automatic teacher membership if no remaining wing assignment exists
 
-Examples:
+Same rules apply for Class Teacher removal.
 
-- `Rajesh Kumar - Class 8A Mathematics`
-- `Priya Sharma - Class Teacher 5B`
-- `Anita Verma - Class 11 Commerce Accountancy`
+### Conflict handling
 
-Activity Staff with no Class Teacher or Subject Teacher assignment must display as:
+Role Manager is sole editor. Before saving a Class/Subject Teacher assignment, system checks for existing conflicts:
+- If another teacher already holds the assignment → confirmation dialog with current holder's name
+- If user confirms → overwrite
 
-- `Activity Staff - Non-assigned`
+Subject Tab (read-only) shows current state after any change.
 
-## Removal Rules
-
-When a Subject Teacher assignment is removed:
-
-- Remove only that Class + Section + Subject mapping.
-- Keep the staff member in the wing if they still have another Subject Teacher, Class Teacher, Coordinator, or Activity Staff assignment in that wing.
-- Remove the automatic teacher membership from the wing if no remaining wing assignment exists.
-
-When a Class Teacher assignment is removed:
-
-- Remove only that Class + Section mapping.
-- Keep the staff member in the wing if they still have another Subject Teacher, Class Teacher, Coordinator, or Activity Staff assignment in that wing.
-- Remove the automatic teacher membership from the wing if no remaining wing assignment exists.
-
-## Conflict Handling
-
-Role Manager is the sole editor. Before saving a Class Teacher or Subject Teacher assignment, the system checks for existing conflicts:
-
-- If another teacher already holds the assignment → show confirmation dialog with current holder's name.
-- If the user confirms → overwrite the previous assignment.
-
-The Subject Tab (read-only) shows the current state after any change.
-
-## Downstream Consumers
+### Downstream consumers
 
 | Module | Consumes |
 |---|---|
 | Wing | Read-only teacher list and class-subject/class-section mapping |
-| Messenger | Visibility between students, Class Teacher, and Subject Teachers |
+| Messenger | Visibility between students, Class Teacher, Subject Teachers |
 | Attendance | Class Teacher attendance scope |
 | Calendar | Subject Teacher and Class Teacher event/test/task scope |
 | Reports | Teacher allocation, class responsibility, subject coverage |
-| My Staff | Read-only filters and columns for subjects, roles, and wings |
+| My Staff | Read-only filters and columns for subjects, roles, wings |
 
-## Save-Time Dialog Rule
+### Save-time dialog rule
 
 Any save that changes Subject Teacher or Class Teacher assignment must explain the affected modules.
 
-Minimum wording:
-
-> This change updates the same assignment used by Subject Tab, Role Manager, Wing, Messenger, Attendance, Calendar, Reports, and My Staff.
+Minimum wording: `This change updates the same assignment used by Subject Tab, Role Manager, Wing, Messenger, Attendance, Calendar, Reports, and My Staff.`
 
 If the change replaces another staff member, the dialog must also name the staff member being replaced.
 
+---
+
 ## School Structure Change Contract
 
-### Covered Structure
+### Covered
 
-This contract covers changes made from My School > Session & Classes:
+Changes made from My School > Session & Classes: academic year, session start/end dates, term/semester structure, class create/rename/code/order/dates/remove/archive, section create/rename/code/order/stream/remove/archive.
 
-- Academic year
-- Session start date
-- Session end date
-- Term or semester structure
-- Class creation
-- Class rename
-- Class code change
-- Class order change
-- Class start and end date change
-- Class removal or archive
-- Section creation
-- Section rename
-- Section code change
-- Section order change
-- Section stream change
-- Section removal or archive
-
-### Canonical Consumers
-
-The Session & Classes structure is consumed by:
+### Canonical consumers
 
 | Module | Dependency |
 |---|---|
@@ -179,95 +111,60 @@ The Session & Classes structure is consumed by:
 | Class Teacher Assignment | Class + section responsibility |
 | Wings | Class-to-wing grouping and derived teacher membership |
 | Attendance | Class-section attendance scope and academic session dates |
-| Calendar | Class, section, subject, and session scheduling scope |
-| Messenger | Visibility between students, staff, class teachers, and subject teachers |
-| Reports | Academic structure, teacher coverage, class reports, attendance reports |
+| Calendar | Class, section, subject, session scheduling scope |
+| Messenger | Visibility between students, staff, class teachers, subject teachers |
+| Reports | Academic structure, teacher coverage, class/attendance reports |
 | Role Manager | Staff assignment visibility and role scope |
 
-### Save Contract
+### Save contract
 
-The save behavior must match the visible UI state.
+Save behavior must match the visible UI state. If UI shows class/section removed, save must either:
+- Delete the corresponding saved row after confirmation
+- Archive or deactivate after confirmation
+- Block the action and explain which dependency prevents removal
 
-If the UI shows that a class or section has been removed, save must either:
+The system must not silently keep a removed class/section active after the user confirms save. Academic year and session date edits must save to the academic session record, not only to local editor state.
 
-- Delete the corresponding saved row after confirmation.
-- Archive or deactivate the row after confirmation.
-- Block the action and explain which dependency prevents removal.
+### Destructive change protocol
 
-The system must not silently keep a removed class or section active after the user confirms save.
-
-Academic year and session date edits must save to the academic session record, not only to local editor state.
-
-### Destructive Change Protocol
-
-Before removing or archiving a class or section, the system must resolve dependencies and show an impact confirmation.
-
-The confirmation must include:
-
+Before removing or archiving a class/section, system must resolve dependencies and show impact confirmation including:
 - Students affected
 - Subjects affected
 - Subject Teachers affected
 - Class Teacher affected
 - Attendance records affected
 - Wing assignment affected
-- Calendar, report, messenger, and role-management impact
+- Calendar, report, messenger, role-management impact
 - Whether the operation is delete, archive, deactivate, or blocked
 
-Destructive change is not allowed when required dependencies cannot be safely migrated, removed, or archived.
+Destructive change not allowed when required dependencies cannot be safely migrated, removed, or archived.
 
-### Validation Contract
+### Validation contract
 
-The structure cannot be saved when blocking validation errors exist.
-
-Blocking errors include:
-
+Structure cannot save when blocking validation errors exist:
 - Missing academic year
 - Missing session dates
-- Session end date before session start date
+- Session end before start
 - Empty class name
-- Duplicate class code in the same session
+- Duplicate class code in same session
 - Active class without sections
 - Empty section name
-- Duplicate section code inside the same class
+- Duplicate section code inside same class
 - Class dates outside academic session dates
-- Class end date before class start date
+- Class end before class start
 
-Non-blocking warnings should remain visible for incomplete setup:
-
+Non-blocking warnings (visible, not blocking):
 - Section has no subjects
-- Class is not assigned to a wing
+- Class not assigned to a wing
 - Class-section has no Class Teacher
 - Subject has no Subject Teacher
 
-### Save Summary Contract
+### Save summary contract
 
-Every save must show a summary before commit.
+Every save must show a summary before commit: added classes/sections, renamed, removed/archived, code changes, order changes, date changes, term structure changes, academic year changes, affected modules.
 
-The summary must include:
+### Audit contract
 
-- Added classes and sections
-- Renamed classes and sections
-- Removed or archived classes and sections
-- Code changes
-- Order changes
-- Date changes
-- Term structure changes
-- Academic year changes
-- Affected modules
+Each committed structure change creates an audit entry recording: actor, timestamp, location (`My School > Session & Classes`), change type, before/after values, class/section scope, affected modules.
 
-### Audit Contract
-
-Each committed structure change must create an audit entry.
-
-The audit entry must record:
-
-- Actor
-- Timestamp
-- Location: My School > Session & Classes
-- Change type
-- Before value
-- After value
-- Class and section scope
-- Affected modules
-
-Audit records are required for add, edit, reorder, date change, academic year change, archive, and delete operations.
+Required for: add, edit, reorder, date change, academic year change, archive, delete operations.

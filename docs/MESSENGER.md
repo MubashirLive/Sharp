@@ -1,8 +1,26 @@
 # SHARP - Messenger
 
-> Last updated: May 2026
-> Status: Planning draft. This file defines Messenger behavior, permissions, integrations, and core rules.
-> Messenger defaults and configurable settings are defined in `MESSENGER_SETTING.md`.
+> Last updated: 2026-06-17
+> Status: ✅ Built (MVP-1). Messenger feature implemented in `src/pages/Messenger.tsx` (647 LOC).
+> Messenger defaults and configurable settings are defined in `MESSENGER_SETTING.md` (settings UI not yet built).
+
+## Build vs spec
+
+| Spec area | Status | Notes |
+|---|---|---|
+| DM (1:1) | ✅ Built | Roles + permissions enforced by RLS |
+| Teacher-formed groups | ✅ Built | Students can send, not create |
+| Broadcasts (one-way) | ✅ Built | Class + section / class + subject auto-broadcasts |
+| Image + PDF media | ✅ Built | Stored in Supabase Storage with RLS |
+| Read receipts | ✅ Built | |
+| 2-min delete window | ✅ Built | Server-side enforcement |
+| Auto class+section / class+subject broadcasts | ✅ Built | |
+| Chat archive | ✅ Built | Per-user archive view |
+| Student / Parent scope | ✅ Built | Assigned teacher + designated admin only |
+| Visibility rules (PERMISSION_MATRIX) | ✅ Built | Enforced by RLS policies |
+| Settings UI (MESSENGER_SETTING) | ❌ Not built | Spec exists, no settings page yet |
+| Realtime delivery | ✅ Built | Supabase Realtime channel |
+| Search | ✅ Built | DM and group search |
 
 ---
 

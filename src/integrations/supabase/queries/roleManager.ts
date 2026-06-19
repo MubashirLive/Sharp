@@ -312,25 +312,18 @@ export type DepartmentMembership = {
 };
 
 export async function getDepartmentMembership(staffId: string, schoolId: string): Promise<DepartmentMembership[]> {
+  // 2026-06-19: is_incharge is now a boolean on department_staff itself. Single
+  // table read; no more 2-table union.
   const { data } = await supabase
     .from("department_staff")
-    .select(`department_id, departments!inner(name:name)`)
+    .select(`department_id, is_incharge, departments!inner(name:name)`)
     .eq("staff_profile_id", staffId)
     .eq("school_id", schoolId);
-
-  const { data: incharges } = await supabase
-    .from("department_incharges")
-    .select("department_id")
-    .eq("staff_profile_id", staffId)
-    .eq("school_id", schoolId)
-    .eq("is_active", true);
-
-  const inchargeSet = new Set((incharges ?? []).map((i) => i.department_id));
 
   return (data ?? []).map((d) => ({
     department_id: d.department_id,
     department_name: (d.departments as any)?.name ?? "Unknown",
-    is_incharge: inchargeSet.has(d.department_id),
+    is_incharge: d.is_incharge,
   }));
 }
 

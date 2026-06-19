@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { StaffRoleCard } from "@/components/role-manager/StaffRoleCard";
-import * as roleAssignments from "@/integrations/supabase/queries/roleAssignments";
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u1" }, role: "principal" }),
@@ -11,6 +10,33 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+// Stub the TanStack Query hook layer. The card consumes `roles` via
+// useStaffRoles; the tests previously mocked getStaffAllRoles directly
+// (the old useState+useEffect path). Same shape, same fixtures.
+vi.mock("@/hooks/useRoleManagerQueries", () => ({
+  useStaffRoles: vi.fn(),
+  useSaveStaffRoles: vi.fn(() => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false })),
+  useStaffList: vi.fn(() => ({ data: [], isLoading: false, refetch: vi.fn() })),
+  useRefreshStaffList: vi.fn(() => vi.fn()),
+  roleManagerKeys: { all: ["role-manager"] },
+}));
+
+const defaultRoles = {
+  staff_id: "s1",
+  is_master_admin: false,
+  is_admin: false,
+  role: "teacher",
+  status: "active",
+  messenger_tag: "Staff",
+  coordinator_wings: [],
+  auto_assigned_wings: [],
+  manual_teacher_wings: [],
+  class_teachers: [],
+  subject_teachers: [],
+  departments: [],
+  house: null,
+};
+
 vi.mock("@/integrations/supabase/queries/roleAssignments", async () => {
   const actual = await vi.importActual<any>("@/integrations/supabase/queries/roleAssignments");
   return {
@@ -18,40 +44,15 @@ vi.mock("@/integrations/supabase/queries/roleAssignments", async () => {
     getWingsForSchool: vi.fn().mockResolvedValue([{ id: "w1", name: "Primary" }]),
     getClassesForSchool: vi.fn().mockResolvedValue([{ id: "c1", name: "Class 1" }]),
     getSectionsForClass: vi.fn().mockResolvedValue([{ id: "sec1", name: "A" }]),
-    getDepartmentsForSchool: vi.fn().mockResolvedValue([{ id: "d1", name: "Sports" }]),
+    getDepartmentsForSchool: vi.fn().mockResolvedValue([{ id: "d1", name: "Sports" }, { id: "d2", name: "Library" }]),
     getHousesForSchool: vi.fn().mockResolvedValue([{ name: "Red", color: "#ef4444" }]),
     getCurrentAcademicYear: vi.fn().mockResolvedValue("ay1"),
     getClassTeacherConflict: vi.fn().mockResolvedValue(null),
-    getStaffAllRoles: vi.fn().mockResolvedValue({
-      staff_id: "s1",
-      is_master_admin: false,
-      is_admin: false,
-      role: "teacher",
-      status: "active",
-      messenger_tag: "Staff",
-      coordinator: null,
-      class_teachers: [],
-      subject_teachers: [],
-      departments: [],
-      house: null,
-    }),
-    updateStaffTag: vi.fn().mockResolvedValue(undefined),
-    updateMasterAdmin: vi.fn().mockResolvedValue(undefined),
-    updateAdminRole: vi.fn().mockResolvedValue(undefined),
-    updateStaffRole: vi.fn().mockResolvedValue(undefined),
-    updateStaffStatus: vi.fn().mockResolvedValue(undefined),
-    addCoordinator: vi.fn().mockResolvedValue(undefined),
-    removeCoordinator: vi.fn().mockResolvedValue(undefined),
-    addClassTeacher: vi.fn().mockResolvedValue(undefined),
-    removeClassTeacher: vi.fn().mockResolvedValue(undefined),
-    addSubjectTeacher: vi.fn().mockResolvedValue(undefined),
-    removeSubjectTeacher: vi.fn().mockResolvedValue(undefined),
-    addDepartmentMember: vi.fn().mockResolvedValue(undefined),
-    removeDepartmentMember: vi.fn().mockResolvedValue(undefined),
-    removeDepartmentIncharge: vi.fn().mockResolvedValue(undefined),
-    setHouse: vi.fn().mockResolvedValue(undefined),
+    getAutoAssignedWingsForStaff: vi.fn().mockResolvedValue([]),
   };
 });
+
+import { useStaffRoles } from "@/hooks/useRoleManagerQueries";
 
 const baseStaff = {
   id: "s1",
@@ -61,6 +62,13 @@ const baseStaff = {
   status: "active",
   school_id: "sc1",
 };
+
+beforeEach(() => {
+  // Reset to the default fixture before each test. Individual tests
+  // override with mockReturnValueOnce for the specific scenarios they
+  // exercise (e.g. collapsed-card dept list, member+incharge dedup).
+  vi.mocked(useStaffRoles).mockReturnValue({ data: defaultRoles, isLoading: false } as any);
+});
 
 describe("StaffRoleCard — view mode", () => {
   it("renders name, id, tag, status, edit button", async () => {
@@ -113,22 +121,27 @@ describe("StaffRoleCard — view mode", () => {
 
   it("collapsed card shows all dept names with incharge crown", async () => {
     // Override the default mock for this test only
-    vi.mocked(roleAssignments.getStaffAllRoles).mockResolvedValueOnce({
-      staff_id: "s1",
-      is_master_admin: false,
-      is_admin: false,
-      role: "teacher",
-      status: "active",
-      messenger_tag: "Staff",
-      coordinator: { id: "w1", wing_id: "w1", wing_name: "Primary Wing" },
-      class_teachers: [],
-      subject_teachers: [],
-      departments: [
-        { id: "d1", department_id: "d1", department_name: "Sports", is_incharge: true },
-        { id: "d2", department_id: "d2", department_name: "Library", is_incharge: false },
-        { id: "d3", department_id: "d3", department_name: "Accounts", is_incharge: false },
-      ],
-      house: null,
+    vi.mocked(useStaffRoles).mockReturnValue({
+      data: {
+        staff_id: "s1",
+        is_master_admin: false,
+        is_admin: false,
+        role: "teacher",
+        status: "active",
+        messenger_tag: "Staff",
+        coordinator_wings: [{ id: "w1", wing_id: "w1", wing_name: "Primary Wing" }],
+        auto_assigned_wings: [],
+        manual_teacher_wings: [],
+        class_teachers: [],
+        subject_teachers: [],
+        departments: [
+          { id: "d1", department_id: "d1", department_name: "Sports", is_incharge: true },
+          { id: "d2", department_id: "d2", department_name: "Library", is_incharge: false },
+          { id: "d3", department_id: "d3", department_name: "Accounts", is_incharge: false },
+        ],
+        house: null,
+      },
+      isLoading: false,
     } as any);
 
     render(
@@ -144,11 +157,11 @@ describe("StaffRoleCard — view mode", () => {
     );
     // Wing name shown
     await waitFor(() => expect(screen.getByText(/Primary Wing/)).toBeInTheDocument());
-    // Incharge dept with crown
-    expect(screen.getByText(/👑 Sports/)).toBeInTheDocument();
-    // Member depts (no crown, no count)
-    expect(screen.getByText("Library")).toBeInTheDocument();
-    expect(screen.getByText("Accounts")).toBeInTheDocument();
+    // Incharge dept with crown + "— Incharge" label
+    expect(screen.getByText(/👑 Sports — Incharge/)).toBeInTheDocument();
+    // Member depts with "— Member" label
+    expect(screen.getByText("Library — Member")).toBeInTheDocument();
+    expect(screen.getByText("Accounts — Member")).toBeInTheDocument();
     // Should NOT show the old "2 depts" count chip
     expect(screen.queryByText(/2 depts/)).not.toBeInTheDocument();
   });
@@ -176,8 +189,10 @@ describe("StaffRoleCard — edit mode", () => {
     await enterEdit();
     expect(screen.getByText("Master Admin")).toBeInTheDocument();
     expect(screen.getByText("Admin")).toBeInTheDocument();
-    expect(screen.getByText("Role")).toBeInTheDocument();
-    expect(screen.getByText("Wing")).toBeInTheDocument();
+    expect(screen.getAllByText("Role").length).toBeGreaterThanOrEqual(1);
+    // Wing section split into Coordinator (manual) + Wings (auto) rows.
+    expect(screen.getByText("Coordinator")).toBeInTheDocument();
+    expect(screen.getByText("Wings")).toBeInTheDocument();
     expect(screen.getByText("Class Teacher")).toBeInTheDocument();
     expect(screen.getByText("Subject Teacher")).toBeInTheDocument();
     expect(screen.getByText("Department")).toBeInTheDocument();
@@ -185,6 +200,49 @@ describe("StaffRoleCard — edit mode", () => {
     expect(screen.getByText("+ Add member")).toBeInTheDocument();
     expect(screen.getByText("+ Add incharge")).toBeInTheDocument();
     expect(screen.getByText("House")).toBeInTheDocument();
+  });
+
+  it("same dept as member + incharge renders only one badge (incharge wins)", async () => {
+    // Override the mock so the staff already has Sports as incharge+member
+    vi.mocked(useStaffRoles).mockReturnValue({
+      data: {
+        staff_id: "s1",
+        is_master_admin: false,
+        is_admin: false,
+        role: "teacher",
+        status: "active",
+        messenger_tag: "Staff",
+        coordinator_wings: [],
+        auto_assigned_wings: [],
+        manual_teacher_wings: [],
+        class_teachers: [],
+        subject_teachers: [],
+        departments: [
+          { id: "dd1", department_id: "d1", department_name: "Sports", is_incharge: true },
+        ],
+        house: null,
+      },
+      isLoading: false,
+    } as any);
+
+    render(
+      <StaffRoleCard
+        staff={baseStaff as any}
+        schoolId="sc1"
+        isOwnCard={false}
+        canEdit={true}
+        isPrincipal={true}
+        isMasterAdmin={false}
+        onRefresh={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    const editBtn = await screen.findByTitle("Edit");
+    fireEvent.click(editBtn);
+
+    await waitFor(() => expect(screen.getByText(/Sports\s+—\s+Incharge/)).toBeInTheDocument());
+    // Should NOT render a separate "Sports — Member" badge
+    expect(screen.queryByText(/Sports\s+—\s+Member/)).not.toBeInTheDocument();
   });
 
   it("shows tag input pre-filled with current tag", async () => {
@@ -294,5 +352,108 @@ describe("StaffRoleCard — edit mode", () => {
     // Admin switch should be disabled
     const adminSwitch = switches[1] as HTMLInputElement;
     expect(adminSwitch).toBeDisabled();
+  });
+});
+
+// ============================================================================
+// 2026-06-18: Manual teacher wings (Wings tab "Add Teacher" output) must
+// render in the Staff card Wings section with a distinct visual (no Lock
+// icon, blue accent) and a "remove via Wings tab" tooltip. Live case: Amit
+// Verma added to Montessori via Wings tab was invisible on the Staff card
+// because the card only read auto_assigned=true rows.
+// ============================================================================
+
+describe("StaffRoleCard — manual teacher wings (Wings tab add-teacher)", () => {
+  const rolesWithManualTeacher = {
+    ...defaultRoles,
+    manual_teacher_wings: [{ id: "w-mont", name: "Montessori" }],
+  };
+
+  it("renders manual teacher wing chip in the Wings row of expanded card with blue accent and no Lock icon", async () => {
+    vi.mocked(useStaffRoles).mockReturnValue({ data: rolesWithManualTeacher, isLoading: false } as any);
+
+    render(
+      <StaffRoleCard
+        staff={baseStaff as any}
+        schoolId="sc1"
+        isOwnCard={false}
+        canEdit={true}
+        isPrincipal={true}
+        isMasterAdmin={false}
+        onRefresh={vi.fn()}
+      />
+    );
+
+    // Expand the card to reveal the drawer sections
+    const expandBtn = screen.getByTitle("Expand");
+    fireEvent.click(expandBtn);
+
+    await waitFor(() => {
+      // The chip renders both in the collapsed AcademicProfile AND the
+      // expanded drawer — both share the same title. Use getAllByTitle.
+      const chips = screen.getAllByTitle("Manual teacher assignment — remove via Wings tab");
+      expect(chips.length).toBeGreaterThan(0);
+    });
+
+    const drawerChips = screen.getAllByTitle("Manual teacher assignment — remove via Wings tab");
+    expect(drawerChips.length).toBeGreaterThan(0);
+    const drawerChip = drawerChips[0];
+    expect(drawerChip).toHaveTextContent("Montessori");
+
+    // Visual: blue accent, no Lock icon inside the manual chip.
+    expect(drawerChip.className).toContain("bg-blue-50");
+    expect(drawerChip.className).toContain("text-blue-700");
+    expect(drawerChip.querySelector("svg")).toBeNull();
+  });
+
+  it("renders manual teacher wing in the collapsed AcademicProfile (Wings sub-row) with blue accent", async () => {
+    vi.mocked(useStaffRoles).mockReturnValue({ data: rolesWithManualTeacher, isLoading: false } as any);
+
+    render(
+      <StaffRoleCard
+        staff={baseStaff as any}
+        schoolId="sc1"
+        isOwnCard={false}
+        canEdit={true}
+        isPrincipal={true}
+        isMasterAdmin={false}
+        onRefresh={vi.fn()}
+      />
+    );
+
+    // AcademicProfile is rendered in the collapsed (always-visible) section.
+    // Find the manual-teacher chip — it must show "Montessori" with the
+    // blue badge class set, no Lock icon.
+    const chip = await screen.findByTitle("Manual teacher assignment — remove via Wings tab");
+    expect(chip).toHaveTextContent("Montessori");
+    expect(chip.className).toContain("bg-blue-50");
+    expect(chip.querySelector("svg")).toBeNull();
+  });
+
+  it("manual teacher wing is suppressed when the staff is also a coordinator of that wing (coordinator wins)", async () => {
+    const rolesOverlap = {
+      ...defaultRoles,
+      manual_teacher_wings: [{ id: "w-mont", name: "Montessori" }],
+      coordinator_wings: [{ id: "w-mont", wing_id: "w-mont", wing_name: "Montessori" }],
+    };
+    vi.mocked(useStaffRoles).mockReturnValue({ data: rolesOverlap, isLoading: false } as any);
+
+    render(
+      <StaffRoleCard
+        staff={baseStaff as any}
+        schoolId="sc1"
+        isOwnCard={false}
+        canEdit={true}
+        isPrincipal={true}
+        isMasterAdmin={false}
+        onRefresh={vi.fn()}
+      />
+    );
+
+    // Coordinator section is present (purple chip with crown).
+    expect(screen.getByText(/👑 Montessori/)).toBeInTheDocument();
+
+    // The manual-teacher chip must NOT render — coordinator wins.
+    expect(screen.queryByTitle("Manual teacher assignment — remove via Wings tab")).toBeNull();
   });
 });

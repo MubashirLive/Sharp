@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 .claude/settings.local.json
 .claude/settings.json
+.docs/
 
 # Env files
 .env

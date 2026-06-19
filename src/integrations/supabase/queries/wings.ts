@@ -324,11 +324,10 @@ export interface WingWithStats {
  *    undefined (legacy `class_teachers` column name) — see the type cast
  *    for `classTeachers` below.
  *  - Auto-assigned teachers (from `staff_roles` / `subject_teachers`) have
- *    no `wing_staff` row. They are synthesised in the auto-merge loop.
- *  - Users can dismiss an auto-assigned staff via the X button. The
- *    dismissal is persisted as a sentinel `wing_staff` row with
- *    `source_type = 'removed'` and a unique `source_id`. Sentinels are
- *    skipped in the display loop but block the auto-merge loop.
+ *    a `wing_staff` row with `auto_assigned=true`. They are managed by the
+ *    auto-assign flow in `roleAssignments.ts` (added/removed alongside
+ *    CT/ST changes). They cannot be removed via the Wings tab UI — the
+ *    X button is disabled.
  */
 export async function getWingsWithFullDetails(schoolId: string): Promise<WingWithStats[]> {
   type WingStaffRow = {
@@ -426,20 +425,7 @@ export async function getWingsWithFullDetails(schoolId: string): Promise<WingWit
   const teachersByWing = new Map<string, WingStaffMember[]>();
   const coordinatorsByWing = new Map<string, WingStaffMember[]>();
 
-  // Track "removed" sentinels: these are wing_staff rows the user explicitly
-  // dismissed (e.g. an auto-assigned class/subject teacher that should not
-  // appear in this wing). They must not be displayed, but they must block
-  // the auto-merge loop from re-adding the same staff.
-  const removedStaffIds = new Set<string>(
-    wingStaff
-      .filter((ws) => ws.source_type === "removed")
-      .map((ws) => `${ws.wing_id}::${ws.staff_id}`)
-  );
-
   for (const ws of wingStaff) {
-    // Skip removal sentinels — they exist only to block the auto-merge.
-    if (ws.source_type === "removed") continue;
-
     const profile = profileMap.get(ws.staff_id);
     const member: WingStaffMember = {
       id: ws.staff_id,
@@ -471,8 +457,6 @@ export async function getWingsWithFullDetails(schoolId: string): Promise<WingWit
     const existingIds = new Set(existing.map((e) => e.staff_id));
 
     for (const staffId of staffIds) {
-      // Skip staff the user has explicitly removed from this wing.
-      if (removedStaffIds.has(`${wingId}::${staffId}`)) continue;
       if (!existingIds.has(staffId)) {
         const profile = profileMap.get(staffId);
         existing.push({
@@ -554,62 +538,6 @@ export async function removeStaffFromWing(
       .eq("wing_id", wingId)
       .eq("staff_id", staffId)
       .eq("assignment_type", assignmentType);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Add a "removed" sentinel row to wing_staff to block auto-merge of an
- * auto-assigned teacher/coordinator in a wing. Use when a user dismisses
- * a staff synthesised from `staff_roles` / `subject_teachers` which has
- * no `wing_staff` row to delete.
- *
- * The sentinel row has `source_type='removed'` and a unique `source_id`.
- * The auto-merge loop in `getWingsWithFullDetails` skips staff with this
- * signature, so the removal persists across reloads.
- *
- * Clears any previous sentinel before inserting to avoid DUPLICATE KEY
- * errors on re-click (idempotent).
- *
- * @param wingId - Wing ID where the staff was dismissed
- * @param staffId - Staff ID being dismissed
- * @param assignmentType - 'teacher' or 'coordinator'
- * @param schoolId - School for RLS
- * @returns success status and error if any
- */
-export async function addRemovedSentinel(
-  wingId: string,
-  staffId: string,
-  assignmentType: "teacher" | "coordinator",
-  schoolId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    // First clear any prior sentinel so we don't accumulate junk on retry.
-    await supabase
-      .from("wing_staff")
-      .delete()
-      .eq("wing_id", wingId)
-      .eq("staff_id", staffId)
-      .eq("assignment_type", assignmentType)
-      .eq("source_type", "removed");
-
-    const { error } = await supabase.from("wing_staff").insert({
-      wing_id: wingId,
-      staff_id: staffId,
-      assignment_type: assignmentType,
-      school_id: schoolId,
-      source_type: "removed",
-      source_id: crypto.randomUUID(),
-      auto_assigned: false,
-      is_primary: false,
-    });
 
     if (error) {
       return { success: false, error: error.message };

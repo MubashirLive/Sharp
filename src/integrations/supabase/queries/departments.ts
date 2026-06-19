@@ -24,11 +24,13 @@ export interface DepartmentWithDetails {
 }
 
 export async function getDepartmentsWithDetails(schoolId: string): Promise<DepartmentWithDetails[]> {
-  const [{ data: departments }, { data: staffProfiles }, { data: deptStaff }, { data: deptIncharges }] = await Promise.all([
+  // 2026-06-19: department_staff now carries an is_incharge boolean — single
+  // table for membership + designation. Dropped the parallel department_incharges
+  // query.
+  const [{ data: departments }, { data: staffProfiles }, { data: deptStaff }] = await Promise.all([
     supabase.from("departments").select("*").eq("school_id", schoolId).order("name"),
     supabase.from("staff_profiles").select("profile_id, full_name, father_name"),
-    supabase.from("departments_staff").select("department_id, staff_id").eq("school_id", schoolId),
-    supabase.from("department_incharges").select("department_id, staff_id").eq("school_id", schoolId),
+    supabase.from("department_staff").select("department_id, staff_profile_id, is_incharge").eq("school_id", schoolId),
   ]);
 
   if (!departments) return [];
@@ -50,16 +52,15 @@ export async function getDepartmentsWithDetails(schoolId: string): Promise<Depar
       visibility: [],
     };
 
-    // Build incharges list from junction table
-    const incharges: DepartmentMember[] = (deptIncharges ?? [])
-      .filter((i) => i.department_id === dept.id)
-      .map((i) => ({ ...buildMember(i.staff_id), role: "incharge" as const }));
-
-    // Build members list from junction table (non-incharges)
-    const inchargeIds = new Set(incharges.map((i) => i.staff_profile_id));
-    const members: DepartmentMember[] = (deptStaff ?? [])
-      .filter((m) => m.department_id === dept.id && !inchargeIds.has(m.staff_id))
-      .map((m) => ({ ...buildMember(m.staff_id), role: "member" as const }));
+    // Partition single-table rows by is_incharge. An incharge-also-member row
+    // is rendered once as incharge (crown wins, no duplicate).
+    const deptRows = (deptStaff ?? []).filter((m) => m.department_id === dept.id);
+    const incharges: DepartmentMember[] = deptRows
+      .filter((r) => r.is_incharge)
+      .map((r) => ({ ...buildMember(r.staff_profile_id), role: "incharge" as const }));
+    const members: DepartmentMember[] = deptRows
+      .filter((r) => !r.is_incharge)
+      .map((r) => ({ ...buildMember(r.staff_profile_id), role: "member" as const }));
 
     return {
       id: dept.id,

@@ -41,6 +41,8 @@ export interface GenderBreakdown {
 export interface HouseWithStats {
   definition: HouseDefinition;
   stats: HouseStats;
+  incharges: HouseInchargeInfo[];
+  staff: HouseStaffMember[];
 }
 
 export interface HouseStaffMember {
@@ -233,6 +235,8 @@ export async function getHousesWithStats(schoolId: string): Promise<HouseWithSta
 
     // Map: wingName → { staff: HouseStaffMember[] }
     const teacherWingMap = new Map<string, HouseStaffMember[]>();
+    // Flat list of every house member (used by HousesAssignmentTab inline edit).
+    const staffMembers: HouseStaffMember[] = [];
     let teachersMale = 0, teachersFemale = 0, teachersOther = 0;
 
     for (const staffId of allStaffIds) {
@@ -258,12 +262,23 @@ export async function getHousesWithStats(schoolId: string): Promise<HouseWithSta
         wings: wingNames,
       };
 
+      staffMembers.push(member);
+
       for (const wingName of wingNames) {
         const existing = teacherWingMap.get(wingName) ?? [];
         existing.push(member);
         teacherWingMap.set(wingName, existing);
       }
     }
+
+    // Build incharges list (filter staff members to those flagged isIncharge)
+    const incharges: HouseInchargeInfo[] = staffMembers
+      .filter((m) => m.isIncharge)
+      .map((m) => ({
+        staffId: m.staffId,
+        fullName: m.fullName,
+        fatherName: m.fatherName,
+      }));
 
     // Build wing breakdowns (same wing order for students + teachers)
     const wingBreakdowns: WingBreakdown[] = sortedWings.map((w: any) => {
@@ -315,6 +330,8 @@ export async function getHousesWithStats(schoolId: string): Promise<HouseWithSta
           teachersOther,
         },
       },
+      incharges,
+      staff: staffMembers,
     };
   });
 }
@@ -497,7 +514,9 @@ export async function getHouseIncharges(
 
 /**
  * Assign staff to a house.
- * Enforces one-house-per-staff: removes from any other house first.
+ * Enforces one-house-per-staff: removes ALL existing rows for this
+ * (staff, school) — including any stale row in the target house from a
+ * previous failed save or concurrent edit — then inserts the target row.
  */
 export async function assignStaffToHouse(
   houseName: string,
@@ -505,13 +524,16 @@ export async function assignStaffToHouse(
   schoolId: string,
   userId?: string
 ): Promise<void> {
-  // Remove from any other house first
+  // Remove every existing row for this staff in this school. The .neq
+  // clause was wrong: it left a stale row in the target house in place,
+  // and the subsequent insert hit the UNIQUE(house_name, staff_profile_id)
+  // constraint. One-house-per-staff means one row total, not "one row per
+  // house except the target".
   await supabase
     .from("house_staff")
     .delete()
     .eq("staff_profile_id", staffId)
-    .eq("school_id", schoolId)
-    .neq("house_name", houseName);
+    .eq("school_id", schoolId);
 
   // Insert into target house
   const { error } = await supabase.from("house_staff").insert({
@@ -544,6 +566,9 @@ export async function removeStaffFromHouse(
 
 /**
  * Set a staff member as House Incharge.
+ * Enforces single-incharge-per-house (UNIQUE(house_name, school_id)):
+ * pre-deletes any existing incharge row for this house, then inserts the
+ * new one.
  */
 export async function setHouseIncharge(
   houseName: string,
@@ -551,13 +576,22 @@ export async function setHouseIncharge(
   schoolId: string,
   userId?: string
 ): Promise<void> {
-  const { error } = await supabase.from("house_incharges").upsert({
+  // The previous upsert with onConflict: "house_name,staff_profile_id,school_id"
+  // failed with "no unique or exclusion constraint matching the ON CONFLICT
+  // specification" because house_incharges has UNIQUE(house_name, school_id)
+  // — single incharge per house — not the 3-column UNIQUE. Use the
+  // pre-delete + insert pattern instead (matches assignStaffToHouse).
+  await supabase
+    .from("house_incharges")
+    .delete()
+    .eq("house_name", houseName)
+    .eq("school_id", schoolId);
+
+  const { error } = await supabase.from("house_incharges").insert({
     house_name: houseName,
     staff_profile_id: staffId,
     school_id: schoolId,
     assigned_by: userId ?? null,
-  }, {
-    onConflict: "house_name,staff_profile_id,school_id",
   });
 
   if (error) throw error;
@@ -579,4 +613,32 @@ export async function removeHouseIncharge(
     .eq("school_id", schoolId);
 
   if (error) throw error;
+}
+
+/**
+ * Remove ALL staff + incharge assignments for a house.
+ * Used by the My School reset action per docs/HOUSE.md §8 — "removes all
+ * staff assignments from that house (including the Incharge designation
+ * if set)". Idempotent: errors on tables with zero matching rows are
+ * silently ignored (the reset semantics are "no-op if already empty").
+ */
+export async function clearHouseAssignments(
+  houseName: string,
+  schoolId: string
+): Promise<void> {
+  // Order doesn't matter (no FK between the two tables). Parallel.
+  const [staffRes, inchargeRes] = await Promise.all([
+    supabase
+      .from("house_staff")
+      .delete()
+      .eq("house_name", houseName)
+      .eq("school_id", schoolId),
+    supabase
+      .from("house_incharges")
+      .delete()
+      .eq("house_name", houseName)
+      .eq("school_id", schoolId),
+  ]);
+  if (staffRes.error) throw staffRes.error;
+  if (inchargeRes.error) throw inchargeRes.error;
 }

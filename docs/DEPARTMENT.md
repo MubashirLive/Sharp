@@ -61,10 +61,9 @@ A school can have zero departments. A department can exist with zero members.
 **Multi-department staff**
 A staff member can belong to multiple departments simultaneously.
 
-**Split model**
+**Split model** (2026-06-19: collapsed into a single junction table)
 - Department creation/rename/delete: `departments` table
-- Incharge assignment: `department_incharges` junction table
-- Member assignment: `departments_staff` junction table
+- Membership + incharge: `department_staff` junction table with `is_incharge BOOLEAN NOT NULL DEFAULT false`
 
 **Multiple incharges**
 A department can have more than one incharge. All incharges hold equal authority.
@@ -148,14 +147,14 @@ Type-to-confirm pattern (matching WingsTab):
 ```
 
 - Confirm button disabled until user types the exact department name
-- Junction table entries (`department_incharges`, `departments_staff`) deleted first, then department record
+- Junction table entries (`department_staff`) deleted first, then department record
 - **Actor Replacement NOT triggered** on delete — this is the explicit destruction path
 
 ---
 
 ## 8. Department Activation Rule
 
-`is_active = department_incharges has at least 1 row for this dept`
+`is_active = department_staff has at least 1 row with is_incharge=true for this dept`
 
 | State | Card badge |
 |---|---|
@@ -168,10 +167,10 @@ Type-to-confirm pattern (matching WingsTab):
 
 **Departments Assignment Tab** (inside Role Manager) handles all incharge/member assignment:
 
-- **Set Incharge** button: Adds staff to `departments_staff` + `department_incharges` in one transaction
-- **Change Incharge**: Same flow (upsert to replacement)
-- **Add Member**: Inserts into `departments_staff`
-- **Remove Member**: Deletes from `departments_staff` + `department_incharges`
+- **Set Incharge** button: Upserts a row into `department_staff` with `is_incharge=true` (and creates the membership row if it doesn't exist)
+- **Change Incharge**: Same flow (upsert; the new staff gets `is_incharge=true`, the previous incharge is set to `is_incharge=false`)
+- **Add Member**: Inserts into `department_staff` with `is_incharge=false`
+- **Remove Member**: Deletes from `department_staff` (single row carries both flags)
 - **Messenger Settings**: gear icon per department row
 
 Incharges display with Crown badge. Members display in muted pills.

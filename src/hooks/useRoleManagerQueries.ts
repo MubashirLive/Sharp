@@ -22,11 +22,20 @@ import {
   addClassTeacher, removeClassTeacher,
   addSubjectTeacher, removeSubjectTeacher,
   addDepartmentMember, removeDepartmentMember, removeDepartmentIncharge,
+  autoAssignTeacherToWing,
+  removeAutoAssignedTeacherFromWing,
   type StaffAllRoles,
 } from "@/integrations/supabase/queries/roleAssignments";
 import { addStaffToWing, getAvailableStaffForWing, getWingsWithFullDetails, removeStaffFromWing } from "@/integrations/supabase/queries/wings";
 import { getDepartmentsWithDetails } from "@/integrations/supabase/queries/departments";
-import { getHousesWithStats } from "@/integrations/supabase/queries/houses";
+import {
+  getHousesWithStats,
+  assignStaffToHouse,
+  removeStaffFromHouse,
+  setHouseIncharge,
+  removeHouseIncharge,
+} from "@/integrations/supabase/queries/houses";
+import { supabase } from "@/integrations/supabase/client";
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -131,6 +140,20 @@ export function useAvailableStaffForWing(schoolId: string | undefined) {
   });
 }
 
+// Houses tab reads the same key as useHouses (which it owns). The query
+// payload now carries incharges[] and staff[] per house — see
+// getHousesWithStats in queries/houses.ts.
+export function useHousesWithDetails(schoolId: string | undefined) {
+  return useQuery({
+    queryKey: schoolId
+      ? roleManagerKeys.houses(schoolId)
+      : ["role-manager", "houses", "noop"],
+    queryFn: () => getHousesWithStats(schoolId!),
+    enabled: !!schoolId,
+    staleTime: 60_000,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Save input shape
 // ---------------------------------------------------------------------------
@@ -139,6 +162,12 @@ export interface SaveWingAssignmentsInput {
   schoolId: string;
   additions: Array<{ wingId: string; staffId: string; role: "coordinator" | "teacher" }>;
   removals: Array<{ wingId: string; staffId: string; role: "coordinator" | "teacher" }>;
+}
+
+export interface SaveHouseAssignmentsInput {
+  schoolId: string;
+  additions: Array<{ houseName: string; staffId: string; role: "incharge" | "staff" }>;
+  removals: Array<{ houseName: string; staffId: string; role: "incharge" | "staff" }>;
 }
 
 export interface SaveStaffRolesInput {
@@ -182,14 +211,29 @@ export interface StaffRoleDraft {
 function invalidateRoleManagerSchool(
   qc: ReturnType<typeof useQueryClient>,
   schoolId: string,
-  options: { wings?: boolean } = {}
+  options: { wings?: boolean; subjects?: boolean; departments?: boolean; broadStaffRoles?: boolean } = {}
 ) {
   qc.invalidateQueries({ queryKey: roleManagerKeys.staffList(schoolId) });
-  qc.invalidateQueries({
-    queryKey: [...roleManagerKeys.all, "staff-roles", schoolId],
-  });
+  // `staff-roles` is the per-card `useStaffRoles` payload. Invalidating
+  // by prefix (broad) re-fetches every staff card for this school —
+  // correct for changes that fan-out across many staff (Houses,
+  // Wings), but a perf cliff for the Subject tab where only one or
+  // two staff actually changed. The Subject path narrows the
+  // invalidation itself, so callers that need the broad sweep must
+  // opt in explicitly with `broadStaffRoles: true`.
+  if (options.broadStaffRoles) {
+    qc.invalidateQueries({
+      queryKey: [...roleManagerKeys.all, "staff-roles", schoolId],
+    });
+  }
   if (options.wings) {
     qc.invalidateQueries({ queryKey: roleManagerKeys.wings(schoolId) });
+  }
+  if (options.subjects) {
+    qc.invalidateQueries({ queryKey: roleManagerKeys.subjects(schoolId) });
+  }
+  if (options.departments) {
+    qc.invalidateQueries({ queryKey: roleManagerKeys.departments(schoolId) });
   }
 }
 
@@ -260,16 +304,19 @@ export function useSaveStaffRoles(schoolId: string | undefined) {
         }
       }
 
-      // 5. Departments — cascade incharge ⇒ member
+      // 5. Departments — cascade incharge ⇒ member.
+      // removeDepartmentMember / removeDepartmentIncharge filter by
+      // (staff_profile_id, department_id) — not by junction row id — so
+      // pass staffId + deptId, not rowId. (2026-06-19 fix: previous code
+      // passed rowId as the first arg, making the delete match zero rows
+      // and silently no-op. The chip then "reappeared" on next load.)
       const effectiveMemberIds = Array.from(new Set([...draft.deptMemberIds, ...draft.deptInchargeIds]));
       const origDeptMemberIds = original.departments.map((d) => d.department_id);
       const origDeptInchargeIds = original.departments.filter((d) => d.is_incharge).map((d) => d.department_id);
-      const deptIdToRowId = new Map(original.departments.map((d) => [d.department_id, d.id]));
 
       for (const deptId of origDeptMemberIds) {
         if (!effectiveMemberIds.includes(deptId)) {
-          const rowId = deptIdToRowId.get(deptId);
-          if (rowId) await removeDepartmentMember(rowId, staffId, sId, currentUserId);
+          await removeDepartmentMember(staffId, deptId, sId, currentUserId);
         }
       }
       for (const deptId of effectiveMemberIds) {
@@ -279,8 +326,7 @@ export function useSaveStaffRoles(schoolId: string | undefined) {
       }
       for (const deptId of origDeptInchargeIds) {
         if (!draft.deptInchargeIds.includes(deptId)) {
-          const rowId = deptIdToRowId.get(deptId);
-          if (rowId) await removeDepartmentIncharge(rowId, staffId, sId, currentUserId);
+          await removeDepartmentIncharge(staffId, deptId, sId, currentUserId);
         }
       }
       for (const deptId of draft.deptInchargeIds) {
@@ -298,9 +344,34 @@ export function useSaveStaffRoles(schoolId: string | undefined) {
       //    cross-staff reassigns: when 10th A moves from Amit to Anjali,
       //    Amit's card must drop the row and Anjali's must gain it.
       //    Broad invalidation by prefix is safe — same data layer.
-      invalidateRoleManagerSchool(qc, schoolId);
+      // 4. departments — MySchool Department tab reads the same
+      //    [schoolId, "departments"] key, so invalidating here makes the
+      //    MySchool view reflect the change instantly without a refresh.
+      invalidateRoleManagerSchool(qc, schoolId, {
+        broadStaffRoles: true,
+        departments: true,
+      });
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cross-tab invalidation. Used by sibling surfaces (e.g. MySchool
+// Department tab) that write to the same tables as the role-manager
+// mutations but live outside the role-manager React subtree. Without
+// this, a write from MySchool leaves the role-manager Staff tab's
+// per-card `useStaffRoles` cache stale until a manual refresh.
+// ---------------------------------------------------------------------------
+
+export function useInvalidateRoleManagerSchool(schoolId: string | undefined) {
+  const qc = useQueryClient();
+  return useCallback(
+    (options: { wings?: boolean; subjects?: boolean; departments?: boolean; broadStaffRoles?: boolean } = {}) => {
+      if (!schoolId) return;
+      invalidateRoleManagerSchool(qc, schoolId, options);
+    },
+    [qc, schoolId]
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -347,8 +418,300 @@ export function useSaveWingAssignments(schoolId: string | undefined) {
       if (!schoolId) return;
       // Wings tab itself reflects the saved state (replaces the local
       // loadData() refetch in the component), plus the standard
-      // school-wide staff list + roles invalidation.
-      invalidateRoleManagerSchool(qc, schoolId, { wings: true });
+      // school-wide staff list + roles invalidation. Broad staff-roles
+      // invalidation is required: a wing reassignment can affect any
+      // staff member tagged as coordinator of that wing.
+      invalidateRoleManagerSchool(qc, schoolId, { wings: true, broadStaffRoles: true });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Houses save mutation — same pattern as wings.
+// Houses mutation functions throw on error instead of returning
+// { success, error? }, so we wrap each in try/catch to keep the loop
+// fail-fast and produce a stable error message for the UI.
+// ---------------------------------------------------------------------------
+
+export function useSaveHouseAssignments(schoolId: string | undefined) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: SaveHouseAssignmentsInput): Promise<void> => {
+      if (!schoolId) throw new Error("schoolId required");
+      // Sequential — stop at first failure to avoid partial DB state.
+      for (const a of input.additions) {
+        try {
+          if (a.role === "incharge") {
+            await setHouseIncharge(a.houseName, a.staffId, schoolId);
+          } else {
+            await assignStaffToHouse(a.houseName, a.staffId, schoolId);
+          }
+        } catch (e: any) {
+          throw new Error(
+            `Failed to save house ${a.role} change: ${e?.message ?? "unknown error"}`
+          );
+        }
+      }
+      for (const r of input.removals) {
+        try {
+          if (r.role === "incharge") {
+            await removeHouseIncharge(r.houseName, r.staffId, schoolId);
+          } else {
+            await removeStaffFromHouse(r.houseName, r.staffId, schoolId);
+          }
+        } catch (e: any) {
+          throw new Error(
+            `Failed to save house ${r.role} removal: ${e?.message ?? "unknown error"}`
+          );
+        }
+      }
+    },
+    onSuccess: () => {
+      if (!schoolId) return;
+      // Houses tab reflects the saved state from this same key (which
+      // useHousesWithDetails reads), plus school-wide staff list + roles
+      // invalidation so a staff member's `house` field stays in sync
+      // across the Staff tab and other tabs. Broad staff-roles
+      // invalidation is required: a house reassignment can affect any
+      // staff member tagged as a house member or incharge.
+      qc.invalidateQueries({ queryKey: roleManagerKeys.houses(schoolId) });
+      invalidateRoleManagerSchool(qc, schoolId, { broadStaffRoles: true });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Subject tab save mutation — writes to staff_roles + wing_staff (auto-assign).
+// Lifted from SubjectAssignmentGrid.handleAssignStaff so the invalidation
+// contract matches Wings/Houses: staffList + staff-roles prefix + wings +
+// subjects. Without this, the Subject tab's old inline save only invalidated
+// staffList, leaving every Staff card's per-staff roles payload stale until
+// a page refresh.
+// ---------------------------------------------------------------------------
+
+export interface SubjectAssignmentWrite {
+  schoolId: string;
+  isClassTeacher: boolean;
+  sectionId: string;
+  classId: string;
+  subjectId: string | null;
+  /** null = remove. */
+  staff: { id: string } | null;
+  /** Prior teacher for the same cell — used for wing auto-assign cleanup. */
+  existingStaffId: string | null;
+}
+
+export function useSaveSubjectAssignment(schoolId: string | undefined) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: SubjectAssignmentWrite): Promise<void> => {
+      if (!schoolId) throw new Error("schoolId required");
+      const { isClassTeacher, sectionId, classId, subjectId, staff, existingStaffId } = input;
+
+      if (!staff) {
+        // Remove-only path.
+        if (isClassTeacher) {
+          const { error } = await supabase
+            .from("staff_roles")
+            .delete()
+            .eq("school_id", schoolId)
+            .eq("class_id", classId)
+            .eq("section_id", sectionId)
+            .eq("role_type", "class_teacher");
+          if (error) throw error;
+        } else if (subjectId) {
+          const { error } = await supabase
+            .from("staff_roles")
+            .delete()
+            .eq("school_id", schoolId)
+            .eq("class_id", classId)
+            .eq("section_id", sectionId)
+            .eq("subject_id", subjectId)
+            .eq("role_type", "subject_teacher");
+          if (error) throw error;
+        }
+        if (existingStaffId) {
+          try {
+            await removeAutoAssignedTeacherFromWing(existingStaffId, classId, schoolId);
+          } catch (wingErr) {
+            // Wing cleanup is best-effort — don't fail the remove.
+            console.warn("Wing auto-unassign failed:", wingErr);
+          }
+        }
+        return;
+      }
+
+      // 1) Remove pre-existing row that would collide on the EXCLUSION
+      //    constraint when switching to a new teacher. Skip if same staff
+      //    (idempotent no-op).
+      if (existingStaffId && existingStaffId !== staff.id) {
+        if (isClassTeacher) {
+          const { error } = await supabase
+            .from("staff_roles")
+            .delete()
+            .eq("school_id", schoolId)
+            .eq("class_id", classId)
+            .eq("section_id", sectionId)
+            .eq("role_type", "class_teacher")
+            .neq("staff_id", staff.id);
+          if (error) throw error;
+        } else if (subjectId) {
+          const { error } = await supabase
+            .from("staff_roles")
+            .delete()
+            .eq("school_id", schoolId)
+            .eq("class_id", classId)
+            .eq("section_id", sectionId)
+            .eq("subject_id", subjectId)
+            .eq("role_type", "subject_teacher")
+            .neq("staff_id", staff.id);
+          if (error) throw error;
+        }
+        try {
+          await removeAutoAssignedTeacherFromWing(existingStaffId, classId, schoolId);
+        } catch (wingErr) {
+          console.warn("Wing auto-unassign failed:", wingErr);
+        }
+      }
+
+      // 2) Upsert chosen assignment. UNIQUE onConflict keeps same-teacher
+      //    re-selection idempotent.
+      const { data: upserted, error } = await supabase
+        .from("staff_roles")
+        .upsert({
+          staff_id: staff.id,
+          school_id: schoolId,
+          role_type: isClassTeacher ? "class_teacher" : "subject_teacher",
+          class_id: classId,
+          section_id: sectionId,
+          subject_id: subjectId ?? null,
+        }, {
+          onConflict: "staff_id, role_type, class_id, section_id, subject_id",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      // 3) Auto-assign to wing if class has one (graceful: don't fail save).
+      if (upserted?.id) {
+        try {
+          await autoAssignTeacherToWing(
+            staff.id,
+            classId,
+            schoolId,
+            upserted.id,
+            isClassTeacher ? "class_teacher" : "subject_teacher"
+          );
+        } catch (wingErr) {
+          console.warn("Wing auto-assign failed:", wingErr);
+        }
+      }
+
+      // 4) Audit (best-effort; missing auth user skips silently).
+      const { data: authData } = await supabase.auth.getUser();
+      const changedBy = authData?.user?.id;
+      if (changedBy) {
+        const action = isClassTeacher ? "class_teacher" : "subject_teacher";
+        const field = "add";
+        try {
+          await supabase.from("staff_role_audit").insert({
+            staff_id: staff.id,
+            school_id: schoolId,
+            action,
+            field,
+            new_value: staff.id,
+            changed_by: changedBy,
+          });
+        } catch {
+          // Audit failure must not roll back the successful save.
+        }
+      }
+    },
+    onSuccess: (_data, input) => {
+      if (!schoolId) return;
+      // Subject tab reflects from the `subjects` key; wings reflects the
+      // auto-assigned teacher; staff directory (staffList) recomputes
+      // is_class_teacher. Matches the Houses/Wings contract.
+      invalidateRoleManagerSchool(qc, schoolId, { wings: true, subjects: true });
+
+      // Narrow staff-roles invalidation: only the two staff whose
+      // class/subject assignments actually changed. Invalidation by
+      // prefix (the old behavior) was correct but caused an N × 8
+      // round-trip fanout on Staff-tab activation — every card refetched
+      // even though only two staff changed. With the narrow invalidation
+      // other cards continue to show their previous (still-correct)
+      // roles payload until the next edit.
+      const affected = new Set<string>();
+      if (input.staff?.id) affected.add(input.staff.id);
+      if (input.existingStaffId) affected.add(input.existingStaffId);
+      for (const staffId of affected) {
+        qc.invalidateQueries({ queryKey: roleManagerKeys.staffRoles(schoolId, staffId) });
+      }
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Department save mutation — Wings/Houses parity.
+//
+// Additions carry `asIncharge: boolean`; removals carry `role: "incharge" |
+// "member"`. The underlying mutators in roleAssignments.ts are the audit-
+// writing functions; this layer owns the call-site ordering and the cache
+// invalidation contract.
+//
+// Broad `staff-roles` invalidation is required: a dept member becoming an
+// incharge flips `is_incharge` on every affected staff's card chips
+// (see StaffRoleCard.tsx dept section). The dept change can fan out across
+// N staff — same trade-off as Wings/Houses.
+// ---------------------------------------------------------------------------
+
+export interface SaveDepartmentAssignmentsInput {
+  schoolId: string;
+  additions: Array<{ departmentId: string; staffId: string; asIncharge: boolean }>;
+  removals: Array<{ departmentId: string; staffId: string; role: "incharge" | "member" }>;
+}
+
+export function useSaveDepartmentAssignments(schoolId: string | undefined) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: SaveDepartmentAssignmentsInput): Promise<void> => {
+      if (!schoolId) throw new Error("schoolId required");
+      // Sequential — stop at first failure to avoid partial DB state.
+      for (const a of input.additions) {
+        try {
+          await addDepartmentMember(a.staffId, a.departmentId, schoolId, a.asIncharge, "");
+        } catch (e: any) {
+          throw new Error(
+            `Failed to save department add: ${e?.message ?? "unknown error"}`
+          );
+        }
+      }
+      for (const r of input.removals) {
+        try {
+          if (r.role === "incharge") {
+            await removeDepartmentIncharge(r.staffId, r.departmentId, schoolId, "");
+          } else {
+            await removeDepartmentMember(r.staffId, r.departmentId, schoolId, "");
+          }
+        } catch (e: any) {
+          throw new Error(
+            `Failed to save department remove: ${e?.message ?? "unknown error"}`
+          );
+        }
+      }
+    },
+    onSuccess: () => {
+      if (!schoolId) return;
+      // Departments tab itself reflects the saved state from the same
+      // `useDepartments` key; standard school-wide invalidation plus broad
+      // staff-roles fan-out (see comment above).
+      invalidateRoleManagerSchool(qc, schoolId, {
+        departments: true,
+        broadStaffRoles: true,
+      });
     },
   });
 }

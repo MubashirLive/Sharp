@@ -9,6 +9,7 @@ import {
   type WingWithStats,
 } from "@/integrations/supabase/queries/wings";
 import { useAvailableStaffForWing, useSaveWingAssignments, useWingsForSchool } from "@/hooks/useRoleManagerQueries";
+import { cleanupStaleAutoWingAssignments } from "@/integrations/supabase/queries/roleAssignments";
 import { WingStaffBadge } from "./WingStaffBadge";
 import { CoordinatorReplacementDialog } from "./CoordinatorReplacementDialog";
 import { CoordinatorsViewAllModal } from "./CoordinatorsViewAllModal";
@@ -221,6 +222,28 @@ export function WingsAssignmentTab({ schoolId, canEdit, onDirtyChange }: WingsAs
       toast.error("Failed to load wings data");
     }
   }, [wingsQuery.error]);
+
+  // 2026-06-18: auto-reap orphan auto_assigned wing_staff rows whose
+  // source_reference points to a deleted staff_roles row. Runs once per
+  // school mount. On non-zero reap, refetch so the UI drops the dead
+  // rows immediately. Non-fatal — UI still works on stale data.
+  useEffect(() => {
+    if (!schoolId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const reaped = await cleanupStaleAutoWingAssignments(schoolId);
+        if (!cancelled && reaped > 0) {
+          console.info(`[Wings] Reaped ${reaped} stale auto wing assignments`);
+          wingsQuery.refetch();
+        }
+      } catch (e) {
+        console.error("[Wings] Auto-reap failed:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolId]);
 
   // Dirty tracking — Wings uses an Edit → Save flow with explicit drafts.
   // Report dirty=true when the user has entered edit mode AND has at
