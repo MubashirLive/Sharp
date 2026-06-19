@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMessengerPanel } from "@/contexts/MessengerContext";
 import { Button } from "@/components/ui/button";
 import { ChatModal } from "@/components/ChatModal";
 import { LogOut, GraduationCap, Building2, Users, ShieldCheck, CalendarDays, MessageSquare } from "lucide-react";
@@ -10,6 +11,7 @@ import { useSchoolPageContext } from "@/pages/SchoolPage";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { school, primaryRole, signOut, isSuperAdmin } = useAuth();
+  const { toggle: toggleMessenger } = useMessengerPanel();
   const navigate = useNavigate();
 
   // Safely access SchoolPage dirty-state context (null when not inside SchoolPage)
@@ -53,7 +55,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="hidden sm:inline">{school?.name ?? "SHARP"}</span>
           </Link>
           <nav className="flex-1 flex items-center gap-1.5 overflow-x-auto">
-            {navItems.map((it) => (
+            {navItems.map((it) =>
+              it.to === "/messenger" ? (
+                <button
+                  key={it.to}
+                  onClick={toggleMessenger}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-1.5",
+                    "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  )}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  {it.label}
+                </button>
+              ) : (
                 <NavLink
                   key={it.to}
                   to={it.to}
@@ -75,7 +90,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   {it.label}
                 </NavLink>
-              ))}
+              )
+            )}
           </nav>
           <div className="flex items-center gap-2">
             <ChatModal />
