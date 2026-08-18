@@ -87,10 +87,16 @@ export function HousesAssignmentTab({
   } | null>(null);
 
   // Bubble dirty state. Per-card dirty OR save-pending OR error.
+  // hasSeeded: only emit dirty after the first render cycle so we never
+  // flicker dirty=true on mount while cards report isEditing=false.
+  const [hasSeeded, setHasSeeded] = useState(false);
+  useEffect(() => {
+    setHasSeeded(true);
+  }, []);
   const isSaving = saveMutation.isPending;
   useEffect(() => {
-    onDirtyChange?.(dirtyHouseNames.size > 0 || isSaving || saveMutation.isError);
-  }, [dirtyHouseNames, isSaving, saveMutation.isError, onDirtyChange]);
+    onDirtyChange?.(hasSeeded && (dirtyHouseNames.size > 0 || isSaving || saveMutation.isError));
+  }, [dirtyHouseNames, isSaving, saveMutation.isError, onDirtyChange, hasSeeded]);
 
   // Surface fetch errors.
   useEffect(() => {

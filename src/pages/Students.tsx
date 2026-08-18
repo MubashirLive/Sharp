@@ -40,6 +40,10 @@ import { useGuardedSubmit } from "@/hooks/useGuardedSubmit";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Student } from "@/integrations/supabase/types";
+import { useStudents, useCreateStudent, useBulkImportStudents } from "@/integrations/supabase/queries/students";
+import type { StudentCreateInput, StudentListItem } from "@/integrations/supabase/queries/students";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 // ─── Form Field Types ─────────────────────────────────────────────────────────
 
@@ -1249,33 +1253,246 @@ interface BulkImportDialogProps {
 }
 
 function BulkImportDialog({ open, onOpenChange, onImport }: BulkImportDialogProps) {
-  const [dragOver, setDragOver] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [rows, setRows] = useState<StudentFormData[]>([]);
-  const [importErrors, setImportErrors] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  function parseCSV(text: string): { headers: string[]; data: Record<string, string>[] } | null {
-    const lines = text.split("\n").filter((l) => l.trim());
-    if (lines.length < 2) return null;
-    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-    const data = lines.slice(1).map((line) => {
-      const vals = line.split(",").map((v) => v.trim());
-      const obj: Record<string, string> = {};
-      headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
-      return obj;
-    });
-    return { headers, data };
-  }
-
-  function validateRow(row: Record<string, string>, rowIndex: number): string[] {
-    const errs: string[] = [];
-    const required = ["student_id_no","first_name","last_name","gender","date_of_birth","class","section","roll_number","admission_date","father_full_name","father_mobile","login_mobile","account_status","category"];
-    // ... validation logic
-    return errs;
-  }
-
-  // ... rest of the BulkImportDialog implementation
+  // Placeholder return — the full file-upload + CSV-parse flow is not
+  // built yet. Just enough to render as a real dialog so the page doesn't
+  // crash on Bulk import click. The full flow (file picker → parseCSV →
+  // validateRow → onImport(rows)) is a follow-up — see TODO in the page.
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Bulk import students</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          CSV bulk-import flow is not wired up yet. Use the Add student
+          button to create students one at a time.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-export default function StudentsPage() { /* ... */ }
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function StudentsPage() {
+  const { school } = useAuth();
+  const schoolId = school?.id;
+  const { data: students = [], isLoading, isError, error } = useStudents(schoolId);
+  const createStudent = useCreateStudent(schoolId);
+  const bulkImport = useBulkImportStudents(schoolId);
+  const { run: runSave, isPending: isSaving } = useGuardedSubmit();
+  const [addOpen, setAddOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  function handleCreateSave(_student: Student, formData: Partial<StudentFormData>) {
+    return runSave(async () => {
+      try {
+        const payload = mapFormDataToStudentRow(formData, schoolId!);
+        if (!payload) {
+          toast.error("Please complete the required fields before saving");
+          return;
+        }
+        await createStudent.mutateAsync(payload);
+        toast.success("Student created");
+        setAddOpen(false);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to create student");
+      }
+    });
+  }
+
+  function handleBulkImport(rows: StudentFormData[]) {
+    return runSave(async () => {
+      try {
+        const payloads = rows
+          .map((r) => mapFormDataToStudentRow(r, schoolId!))
+          .filter((p): p is StudentCreateInput => p !== null);
+        if (payloads.length === 0) {
+          toast.error("No valid rows to import");
+          return;
+        }
+        await bulkImport.mutateAsync(payloads);
+        toast.success(`Imported ${payloads.length} student${payloads.length === 1 ? "" : "s"}`);
+        setBulkOpen(false);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to import students");
+      }
+    });
+  }
+
+  const filtered = students.filter((s) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      s.full_name?.toLowerCase().includes(q) ||
+      s.school_internal_id?.toLowerCase().includes(q) ||
+      s.roll_no?.toLowerCase().includes(q)
+    );
+  });
+
+  if (!schoolId) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Select a school to manage students.
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold">Students</h1>
+          <p className="text-sm text-muted-foreground">
+            {students.length} total · {filtered.length} shown
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, ID, or roll"
+            className="clay-input w-64"
+          />
+          <Button variant="outline" onClick={() => setBulkOpen(true)} disabled={isSaving}>
+            Bulk import
+          </Button>
+          <Button onClick={() => setAddOpen(true)} disabled={isSaving}>
+            Add student
+          </Button>
+        </div>
+      </div>
+
+      {isLoading && <p className="text-sm text-muted-foreground">Loading students…</p>}
+      {isError && (
+        <p className="text-sm text-red-600">
+          Failed to load students{error instanceof Error ? `: ${error.message}` : ""}
+        </p>
+      )}
+
+      {!isLoading && !isError && (
+        <div className="border rounded-md overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted text-left">
+              <tr>
+                <th className="px-3 py-2 font-medium">Student ID</th>
+                <th className="px-3 py-2 font-medium">Name</th>
+                <th className="px-3 py-2 font-medium">Class / Section</th>
+                <th className="px-3 py-2 font-medium">Roll</th>
+                <th className="px-3 py-2 font-medium">Gender</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                    No students found.
+                  </td>
+                </tr>
+              )}
+              {filtered.map((s) => (
+                <tr key={s.id} className="border-t">
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {s.school_internal_id ?? "—"}
+                  </td>
+                  <td className="px-3 py-2">{s.full_name}</td>
+                  <td className="px-3 py-2">{classSectionLabel(s)}</td>
+                  <td className="px-3 py-2">{s.roll_no}</td>
+                  <td className="px-3 py-2">{s.gender ?? "—"}</td>
+                  <td className="px-3 py-2">
+                    {s.status ? (
+                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">
+                        {s.status}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <StudentFormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        student={null}
+        onSave={handleCreateSave}
+        schoolId={schoolId}
+      />
+
+      <BulkImportDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        onImport={handleBulkImport}
+      />
+    </div>
+  );
+}
+
+// ─── Mapping helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Translate a StudentFormData payload (what the dialog collects) into a
+ * row shaped for the `students` table insert. Returns null if the minimum
+ * required fields are missing — the caller should drop these rows and
+ * surface a validation error.
+ */
+function mapFormDataToStudentRow(
+  formData: Partial<StudentFormData>,
+  schoolId: string
+): StudentCreateInput | null {
+  if (!formData.first_name || !formData.last_name) return null;
+  if (!formData.class_id || !formData.section_id) return null;
+  if (!formData.roll_number) return null;
+
+  const middle = formData.middle_name?.trim();
+  const fullName = [formData.first_name, middle, formData.last_name]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    full_name: fullName,
+    first_name: formData.first_name,
+    middle_name: middle || null,
+    last_name: formData.last_name,
+    school_id: schoolId,
+    class_id: formData.class_id,
+    section_id: formData.section_id,
+    roll_no: formData.roll_number,
+    gender: formData.gender ?? null,
+    admission_date: formData.admission_date || null,
+    status: formData.account_status ?? "Active",
+    father_mobile: formData.father_mobile || null,
+    mother_mobile: formData.mother_mobile || null,
+    father_first_name: formData.father_first_name || null,
+    father_middle_name: formData.father_middle_name || null,
+    father_last_name: formData.father_last_name || null,
+    student_mobile: formData.student_mobile || null,
+    primary_guardian: formData.primary_guardian ?? null,
+    category: formData.category ?? null,
+    nationality: formData.nationality ?? null,
+    religion: formData.religion ?? null,
+    blood_group: formData.blood_group || null,
+  };
+}
+
+// Class/section names are joined onto each student row by
+// getStudentsForSchool. If the join is missing (e.g. the class was
+// deleted) we fall back to short ID prefixes so the column isn't empty.
+function classSectionLabel(
+  s: StudentListItem & { _className?: string; _sectionName?: string }
+): string {
+  const c = s._className;
+  const sec = s._sectionName;
+  if (c && sec) return `${c} - ${sec}`;
+  if (c) return c;
+  return `${s.class_id.slice(0, 4)} / ${s.section_id.slice(0, 4)}`;
+}

@@ -1,0 +1,101 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+/* ─── Sharp Design System — Instagram Monochromatic Theme ────────────────────
+   Pure Black (#000000) · Pure White (#FFFFFF) · Crisp Grays · Zero Blue/Teal
+   ──────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* ── Monochrome Accents ──────────────────── */
+  --color-accent: #000000;
+  --color-accent-pressed: #262626;
+  --color-accent-light: #EFEFEF;
+  --color-accent-subtle: #FAFAFA;
+  --color-accent-dark: #000000;
+
+  /* ── Semantic Colors ─────────────────────── */
+  --color-surface: #FFFFFF;
+  --color-surface-secondary: #FAFAFA;
+  --color-surface-elevated: #FFFFFF;
+  --color-on-surface: #000000;
+  --color-on-surface-secondary: #737373;
+  --color-on-surface-tertiary: #8E8E8E;
+
+  /* ── Separators ───────────────────────────── */
+  --color-separator: #DBDBDB;
+  --color-separator-opaque: #EFEFEF;
+
+  /* ── Status ───────────────────────────────── */
+  --color-destructive: #ED4956;
+  --color-success: #000000;
+  --color-warning: #FF9500;
+  --color-info: #000000;
+
+  /* ── Fill ──────────────────────────────────── */
+  --color-fill: rgba(0,0,0,0.08);
+  --color-fill-secondary: rgba(0,0,0,0.04);
+  --color-fill-tertiary: rgba(0,0,0,0.02);
+}
+
+/* ─── Custom Design Tokens (CSS Variables) ───────────────────────── */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary-hsl: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary-hsl: 0 0% 98%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 98%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 0%;
+    --accent-foreground: 0 0% 100%;
+    --success: 0 0% 0%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 100% 50%;
+    --warning-foreground: 0 0% 0%;
+    --destructive: 355 81% 61%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 86%;
+    --input: 0 0% 86%;
+    --ring: 0 0% 0%;
+    --radius: 0.625rem;
+
+    --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-rounded: 'SF Pro Rounded', system-ui, sans-serif;
+    --font-serif: Georgia, 'Times New Roman', serif;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 15%;
+    --popover-foreground: 0 0% 100%;
+    --primary-hsl: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary-hsl: 0 0% 7%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 7%;
+    --muted-foreground: 0 0% 66%;
+    --accent: 0 0% 100%;
+    --accent-foreground: 0 0% 0%;
+    --success: 0 0% 100%;
+    --success-foreground: 0 0% 0%;
+    --warning: 37 100% 53%;
+    --warning-foreground: 0 0% 0%;
+    --destructive: 355 81% 61%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 0 0% 100%;
+  }
+}

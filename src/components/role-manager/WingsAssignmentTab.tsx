@@ -118,7 +118,7 @@ function StaffPicker({ staffList, onSelect, buttonLabel }: StaffPickerProps) {
 
   const filteredStaff = search
     ? staffList.filter((s) => s.full_name.toLowerCase().includes(search.toLowerCase()))
-    : staffList.slice(0, 10);
+    : staffList;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -245,13 +245,19 @@ export function WingsAssignmentTab({ schoolId, canEdit, onDirtyChange }: WingsAs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
-  // Dirty tracking — Wings uses an Edit → Save flow with explicit drafts.
+  // Dirty tracking � Wings uses an Edit ? Save flow with explicit drafts.
   // Report dirty=true when the user has entered edit mode AND has at
   // least one non-empty draft. Parent gates tab-switching on this.
+  // hasSeeded: only emit dirty after the first render cycle so we never
+  // flicker dirty=true on mount with an empty drafts map.
+  const [hasSeeded, setHasSeeded] = useState(false);
+  useEffect(() => {
+    setHasSeeded(true);
+  }, []);
   const isDirty = isEditing && drafts.size > 0;
   useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+    onDirtyChange?.(hasSeeded && isDirty);
+  }, [isDirty, onDirtyChange, hasSeeded]);
 
   // Before unload guard
   useEffect(() => {

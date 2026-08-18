@@ -1,3 +1,0 @@
-# Sync
-
-> Reserved. Pending content.

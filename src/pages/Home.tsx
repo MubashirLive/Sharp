@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, Building2, Users, ClipboardCheck, GraduationCap, AlertCircle, CalendarDays, MessageSquare, UserCog } from "lucide-react";
+import { ShieldCheck, Building2, Users, ClipboardCheck, GraduationCap, AlertCircle, CalendarDays, MessageSquare, UserCog, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
@@ -66,8 +66,8 @@ export default function Home() {
             {profile?.salutation && profile?.full_name
               ? `${profile.salutation} ${profile.full_name}`
               : profile?.full_name
-              ? profile.full_name
-              : "Welcome back"}
+                ? profile.full_name
+                : "Welcome back"}
           </h1>
           {role && (
             <Badge variant="secondary" className="mt-1">{ROLE_LABEL[role] ?? role}</Badge>
@@ -128,6 +128,9 @@ export default function Home() {
                 onClick={openMessenger}
               />
               <DashboardCard icon={UserCog} title="Role Manager" desc="Assign staff roles, subjects, wings & departments" to="/role-manager" />
+              {(role === "principal" || role === "admin") && (
+                <DashboardCard icon={Clock} title="Timetable" desc="Build & manage weekly class schedules" to="/timetable" />
+              )}
               {(role === "class_teacher" || role === "coordinator") ? (
                 <>
                   {dashboardStatus.data ? (

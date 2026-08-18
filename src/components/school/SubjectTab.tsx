@@ -30,6 +30,41 @@ interface Wing {
   name: string;
 }
 
+/** Row shape returned by the section_subjects load query. */
+interface SectionSubjectRow {
+  section_id: string;
+  subject_name: string;
+  subject_code: string | null;
+  stream: string | null;
+}
+
+/**
+ * Collapse section_subjects rows for one section into unique subjects keyed by
+ * name. A UNIQUE (section_id, subject_name) constraint now prevents duplicate
+ * rows at the DB level; this is defense-in-depth so a stray duplicate can never
+ * produce duplicate React keys in the edit modal (which broke the remove button).
+ */
+export function toSectionSubjects(
+  rows: SectionSubjectRow[],
+  sectionId: string
+): AssignedSubject[] {
+  return [
+    ...new Map(
+      rows
+        .filter((s) => s.section_id === sectionId)
+        .map((s): [string, AssignedSubject] => [
+          s.subject_name,
+          {
+            name: s.subject_name,
+            code: s.subject_code,
+            stream: s.stream ?? undefined,
+            isCustom: !s.subject_code,
+          },
+        ])
+    ).values(),
+  ];
+}
+
 const getClassAcademicRank = (className: string): number => {
   const name = className.toLowerCase().trim();
   if (name === "nursery") return 0;
@@ -90,9 +125,11 @@ export function SubjectTab({ schoolId, academicYearId, onStatusChange, onDirtyCh
             .delete()
             .eq("section_id", sec.id);
 
-          // Insert new section_subjects
+          // Insert new section_subjects. Upsert (ignore duplicates) so a
+          // stray row can't trip the UNIQUE (section_id, subject_name)
+          // constraint and fail the save.
           if (sec.subjects.length > 0) {
-            await supabase.from("section_subjects").insert(
+            await supabase.from("section_subjects").upsert(
               sec.subjects.map((sub) => ({
                 section_id: sec.id,
                 school_id: schoolId,
@@ -100,7 +137,8 @@ export function SubjectTab({ schoolId, academicYearId, onStatusChange, onDirtyCh
                 subject_code: sub.code || null,
                 stream: sub.stream || null,
                 is_active: true,
-              }))
+              })),
+              { onConflict: "section_id,subject_name", ignoreDuplicates: true }
             );
           }
 
@@ -128,7 +166,7 @@ export function SubjectTab({ schoolId, academicYearId, onStatusChange, onDirtyCh
             for (const sec of cls.sections) {
               await supabase.from("section_subjects").delete().eq("section_id", sec.id);
               if (sec.subjects.length > 0) {
-                await supabase.from("section_subjects").insert(
+                await supabase.from("section_subjects").upsert(
                   sec.subjects.map((sub) => ({
                     section_id: sec.id,
                     school_id: schoolId,
@@ -136,7 +174,8 @@ export function SubjectTab({ schoolId, academicYearId, onStatusChange, onDirtyCh
                     subject_code: sub.code || null,
                     stream: sub.stream || null,
                     is_active: true,
-                  }))
+                  })),
+                  { onConflict: "section_id,subject_name", ignoreDuplicates: true }
                 );
               }
               if (isSeniorClass(sec.name) && sec.stream) {
@@ -250,14 +289,7 @@ export function SubjectTab({ schoolId, academicYearId, onStatusChange, onDirtyCh
       for (const sec of sectionRows || []) {
         const cls = classMap.get(sec.class_id);
         if (cls) {
-          const subjects = (subjectRows || [])
-            .filter((s) => s.section_id === sec.id)
-            .map((s) => ({
-              name: s.subject_name,
-              code: s.subject_code,
-              stream: s.stream,
-              isCustom: !s.subject_code,
-            }));
+          const subjects = toSectionSubjects(subjectRows || [], sec.id);
 
           cls.sections.push({
             id: sec.id,

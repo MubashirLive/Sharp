@@ -27,18 +27,12 @@ Last update: 2026-06-17. Start here. Every cluster links to its source-of-truth 
 - [KEY_ROTATION_RUNBOOK.md](KEY_ROTATION_RUNBOOK.md) — Supabase key rotation
 - [INTEGRATION.md](INTEGRATION.md) — Supabase integration
 - [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) — Tokens, components, UX rules
-- [CLASSES_FIX.md](CLASSES_FIX.md) — Classes tab history
 - [STAFF_DELETION.md](STAFF_DELETION.md) — Staff deletion rules
 - [STAFF_FORM.md](STAFF_FORM.md) — Staff 7-tab form
 - [STUDENT_FORM.md](STUDENT_FORM.md) — Student 10-tab form
-- [SESSION_FORM.md](SESSION_FORM.md) — Academic session form
 
 ## Feature
 - [ROLE_MANAGER.md](ROLE_MANAGER.md) — Role manager (wings/dept/houses/coord)
-- [SUBJECT.md](SUBJECT.md) — Subject hierarchy
-- [DEPARTMENT.md](DEPARTMENT.md) — Department tab
-- [WINGS.md](WINGS.md) — Wings tab
-- [HOUSE.md](HOUSE.md) — House assignment
 - [ATTENDANCE.md](ATTENDANCE.md) — Attendance module
 - [CALENDAR.md](CALENDAR.md) — Calendar module
 - [MESSENGER.md](MESSENGER.md) — Chat / Messenger

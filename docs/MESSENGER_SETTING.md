@@ -4,6 +4,8 @@
 > Status: 📝 Spec only. This file defines Messenger defaults, configurable settings, and permission behavior. Settings UI is not yet built — defaults are currently hardcoded in `src/pages/Messenger.tsx` and enforced by RLS.
 
 ---
+## Rough Notes
+Permission to allow the students to send the messages to -: Principal, Master Admin, Admin, Departmental Incharge.
 
 ## SECTION 1 - PURPOSE
 

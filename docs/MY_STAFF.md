@@ -2,7 +2,7 @@
 ### Module: My Staff (Staff Directory & Identity Management)
 ### Version: 1.0
 ### Status: Ready for Implementation
-### Cross-References: STAFF_FORM.md, ROLES.md, AUTH.md, WINGS.md, HOUSE.md, ATTENDANCE.md, ONBOARDING.md
+### Cross-References: STAFF_FORM.md, ROLE_MANAGER.md, AUTH.md, ATTENDANCE.md, ONBOARDING.md
 
 ---
 
@@ -359,7 +359,7 @@ Each row has three visible actions and a **More** dropdown:
 **Cascade Checks for Mark Inactive / Delete:**
 Before allowing the action, the system checks:
 1. Is this staff a **Class Teacher** of any section? → Block: *"[Name] is Class Teacher of [Class-Section]. Reassign in Role Manager before deactivating."*
-2. Is this staff the **sole Coordinator** of any wing? → Block: *"[Name] is the only Coordinator of [Wing]. Assign a replacement in Wing Tab before deactivating."* (per `WINGS.md` Actor Replacement Protocol)
+2. Is this staff the **sole Coordinator** of any wing? → Block: *"[Name] is the only Coordinator of [Wing]. Assign a replacement in Wing Tab before deactivating."* (per `ROLE_MANAGER.md` §3.3 Actor Replacement Protocol)
 3. Is this staff the **sole Department Incharge**? → Block: *"[Name] is the only Incharge of [Department]. Assign a replacement in Department Tab before deactivating."*
 4. Is this staff a **House Incharge**? → Block: *"[Name] is House Master of [House]. Reassign in House Tab before deactivating."*
 
@@ -619,15 +619,15 @@ My Staff consumes read-only data from other modules for filtering and display. I
 | Staff Form Stage 1–4 fields | `STAFF_FORM.md` | Canonical field definitions, validation rules, ID generation. |
 | Role classification, Messenger Tag | `ROLES.md` | Role Manager owns the truth. My Staff consumes and writes back Messenger Tag only. |
 | Active/Inactive status, PIN reset, login | `AUTH.md` | `profiles.status` is the system of record. |
-| Wing membership filter | `WINGS.md` | Read-only consumption. Wing Tab owns assignments. |
-| House membership filter | `HOUSE.md` | Read-only consumption. House Tab owns assignments. |
-| Department membership filter | `DEPARTMENT.md` (implied) | Read-only consumption. Department Tab owns assignments. |
+| Wing membership filter | `ROLE_MANAGER.md` §3.3 | Read-only consumption. Role Manager owns coordinator/staff assignment; My School owns class↔wing. |
+| House membership filter | `ROLE_MANAGER.md` §3.5 | Read-only consumption. Role Manager owns staff assignment; My School owns house name/emblem. |
+| Department membership filter | `ROLE_MANAGER.md` §3.4 | Read-only consumption. Role Manager owns assignment; My School owns dept name/status. |
 | Subject and Class Teacher assignment filter | `MY_SCHOOL.md`, `ROLE_MANAGER.md`, `INTEGRATION.md` | Read-only consumption. Subject Tab and Role Manager edit the same assignment state. |
 | Attendance Register | `ATTENDANCE.md` | My Staff is upstream source for staff list. |
 | ID Card generation | `STAFF_FORM.md` §ID Card Generation | A6 PDF spec lives in Staff Form. |
 | Appointment Letter | `STAFF_FORM.md` §Appointment Letter Generation | Template and data source spec. |
 | Bulk Import templates | `STAFF_FORM.md` §Bulk Operations | Quick Enrollment and Bulk Full Import definitions. |
-| Actor Replacement Protocol | `WINGS.md`, `DEPARTMENT.md` | Cascade blocks on deactivation/deletion. |
+| Actor Replacement Protocol | `ROLE_MANAGER.md` §3.4/§3.5, `STAFF_DELETION.md` | Cascade blocks on deactivation/deletion. |
 
 ---
 

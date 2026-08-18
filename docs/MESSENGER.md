@@ -1,26 +1,36 @@
 # SHARP - Messenger
 
 > Last updated: 2026-06-17
-> Status: ✅ Built (MVP-1). Messenger feature implemented in `src/pages/Messenger.tsx` (647 LOC).
+> Status: Not Built (MVP-1). Messenger feature implemented in `src/pages/Messenger.tsx` (647 LOC).
 > Messenger defaults and configurable settings are defined in `MESSENGER_SETTING.md` (settings UI not yet built).
+
+## Rough Notes 
+In messenger there are two key features broadcast and the automatic message . These features works in this way that it sends the message automatically to bulk user for example if an homework is assigned by a teacher then all the students will receive the message related to homework automatically in their chat and  the chat box which is shared by the student and that particular teacher will be used similarly the task which is assigned to the staff or  holidays declared or any event is declared all can be communicated through the Messenger and its features broadcast and automatic message will be used. Along with it has the link to lend on the section of the app where it is shown. It will integrate with the Calendar
+
+Messenger must not include unnecessary Whatsapp features such as calls, status, communities, payments, Updates, or public social sharing. We are taking only Chat, Group and Broadcast from the Whatsapp with our own modification
+
+### Messages Permission 
+Student can send the message to their assigned Subject Teacher, Class Teacher, Admin (if permitted), Master Admin(if permitted), Departmental Head (if permitted) and Principal (if permitted) . 
+Can never see the other student in the app therefore can never send the message to the other students. 
+
 
 ## Build vs spec
 
 | Spec area | Status | Notes |
 |---|---|---|
-| DM (1:1) | ✅ Built | Roles + permissions enforced by RLS |
-| Teacher-formed groups | ✅ Built | Students can send, not create |
-| Broadcasts (one-way) | ✅ Built | Class + section / class + subject auto-broadcasts |
-| Image + PDF media | ✅ Built | Stored in Supabase Storage with RLS |
-| Read receipts | ✅ Built | |
-| 2-min delete window | ✅ Built | Server-side enforcement |
-| Auto class+section / class+subject broadcasts | ✅ Built | |
-| Chat archive | ✅ Built | Per-user archive view |
-| Student / Parent scope | ✅ Built | Assigned teacher + designated admin only |
-| Visibility rules (PERMISSION_MATRIX) | ✅ Built | Enforced by RLS policies |
+| DM (1:1) | Not Built | Roles + permissions enforced by RLS |
+| Teacher-formed groups | Not Built | Students can send, not create |
+| Broadcasts (one-way) | Not Built | Class + section / class + subject auto-broadcasts |
+| Image + PDF media | Not Built | Stored in Supabase Storage with RLS |
+| Read receipts | Not Built | |
+| 2-min delete window | Not Built | Server-side enforcement |
+| Auto class+section / class+subject broadcasts | Not Built | |
+| Chat archive | Not Built | Per-user archive view |
+| Student / Parent scope | Not Built | Assigned teacher + designated admin only |
+| Visibility rules (PERMISSION_MATRIX) | Not Built | Enforced by RLS policies |
 | Settings UI (MESSENGER_SETTING) | ❌ Not built | Spec exists, no settings page yet |
-| Realtime delivery | ✅ Built | Supabase Realtime channel |
-| Search | ✅ Built | DM and group search |
+| Realtime delivery | Not Built | Supabase Realtime channel |
+| Search | Not Built | DM and group search |
 
 ---
 
@@ -35,10 +45,7 @@ Messenger is not only a chat feature. It is also the communication layer used by
 - Calendar
 - Task Management
 - Homework
-- Attendance alerts
-- Broadcast announcements
-- Department communication
-- Wing communication
+- Attendance 
 - Future modules that need school communication
 
 **Core rule:** Messenger must respect school hierarchy, role permissions, class assignments, subject assignments, department assignments, wing assignments, and student privacy.
@@ -47,8 +54,7 @@ Messenger is not only a chat feature. It is also the communication layer used by
 
 ## SECTION 2 - DESIGN PRINCIPLES
 
-- Messenger should feel familiar and simple, inspired by common chat apps.
-- Messenger should not include unnecessary social features such as calls, status, communities, payments, linked devices, or public social sharing.
+- Messenger should feel familiar and simple, inspired by common whatsapp chat app.
 - Communication must be role-gated.
 - Students cannot freely search or message other students.
 - Student-to-student visibility is allowed only inside approved groups.
@@ -61,7 +67,7 @@ Messenger is not only a chat feature. It is also the communication layer used by
 
 ## SECTION 3 - USER TYPES
 
-Messenger may be used by:
+Messenger will be used by:
 
 - Principal
 - Master Admin
@@ -71,12 +77,11 @@ Messenger may be used by:
 - Teacher
 - Class Teacher
 - Department Member
-- Non-Teaching Staff, if permitted
-- Student / Parent account
+- Student 
 
 Super Admin has no Messenger access inside any school's internal communication.
 
-Student / Parent follows the existing app rule: one enrollment equals one app user. The app does not separately track whether the student or parent is using it at home.
+Student follows the existing app rule: one enrollment equals one app user. The app does not separately track whether the student or parent is using it at home.
 
 ---
 
@@ -192,6 +197,9 @@ Calendar message content:
 - Calendar title becomes the Messenger message heading.
 - Calendar description becomes the Messenger message body.
 - The message includes an in-app link or button to open the Calendar item.
+1.	Integration with Calendar : When an event(school event, holiday, exam, test, homework, task) is created by the person then it will be automatically declared through broadcast. There is the coloumn named Recipient in the calendar. Which will automatically send the event message to the recipient marked in that or the scheduled messeged is sent to the receipient on the sechduled time. Here broadcast means such message which dropped/received  at multiple chatbox at the same time where the sender in all is the same person. And the chatbox is used is the same between sender and recipient. Also there is the check box on the calendar page to decide if it is checked then only the broadcast message is sent.
+What content is actually sent : When a new calendar event is made its title become the heading and description become the body of the message and it is send automatically to all the selected recipient along with the in app link to calendar page to see that event on calendar.
+
 
 ### Task Management Integration
 
@@ -225,24 +233,16 @@ Task messages are system-generated and cannot be edited like normal messages.
 
 ### Homework Integration
 
-Homework uses Messenger for student/parent notifications.
+Homework uses Messenger for student communication .
 
-Messenger may notify students/parents when:
-
-- Homework is assigned
+Messenger notify students when, Homework is assigned
 - Homework due date is near, if reminders are enabled later
-- Homework is reviewed
-- Teacher comments are added
-
-Homework message content should include:
-
+- Homework message content should include:
 - Homework title or subject
 - Class/section
-- Due date
-- Short instruction or description
+- Description
 - In-app link or button to open homework
 
-Homework notifications must not give students a way to message unrelated teachers or other students.
 
 ### Attendance Integration
 

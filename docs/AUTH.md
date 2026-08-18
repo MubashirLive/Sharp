@@ -31,9 +31,10 @@
 
 ```
 Super Admin creates Principal
-  → Principal creates Master Admin / Admin / Staff / Students
-    → Master Admin creates Admin / Staff / Students
-```
+  → Principal creates Staff Id and Student Id
+  → And assign the Staff Id with Master Admin / Admin / Cooridinator / Department Incharge /Department Member 
+    → Master Admin creates Staff Id and can assign Admin / Cooridinator / Department Incharge /Department Member
+``` → Master Admin creates Student Id
 
 ---
 
@@ -44,8 +45,8 @@ Super Admin creates Principal
 ```
 super_admin (platform-level, no school)
   └── principal (full school access)
-        └── master_admin (full school, no billing)
-              ├── admin (configurable permissions)
+        └── master_admin (Limited school permisssion)
+              ├── admin (View permissions)
               ├── teacher (own class/subject)
               └── student (mobile-only, own data)
 ```

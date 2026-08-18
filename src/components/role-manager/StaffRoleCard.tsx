@@ -134,9 +134,11 @@ export function StaffRoleCard({
     setDraftDeptMemberIds(r.departments.map((d) => d.department_id));
     setDraftDeptInchargeIds(r.departments.filter((d) => d.is_incharge).map((d) => d.department_id));
     setDraftHouse(r.house?.house_name ?? "");
+    setHasSeeded(true);
   };
 
   // Compute dirty state
+  const [hasSeeded, setHasSeeded] = useState(false);
   const dirty = useMemo(() => {
     if (!roles) return false;
     const origCoordWingIds = roles.coordinator_wings.map((c) => c.wing_id);
@@ -159,7 +161,8 @@ export function StaffRoleCard({
     );
   }, [roles, draftTag, draftIsMasterAdmin, draftIsAdmin, draftRole, draftStatus, draftHouse, draftCoordinatorWingIds, draftClassTeachers, draftSubjectTeachers, draftDeptMemberIds, draftDeptInchargeIds]);
 
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  const effectiveDirty = hasSeeded ? dirty : false;
+  useEffect(() => { onDirtyChange?.(effectiveDirty); }, [effectiveDirty, onDirtyChange]);
 
   // Enter edit mode — load lookups
   const enterEdit = async () => {

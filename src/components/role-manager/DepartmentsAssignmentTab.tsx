@@ -80,14 +80,20 @@ export function DepartmentsAssignmentTab({
 
   // Bubble dirty state. Any per-card dirty state counts (the parent has
   // no knowledge of which card is dirty, but the cards call onDirtyChange
-  // via their own state â€” and we mirror their isEditing here as a cheap
+  // via their own state — and we mirror their isEditing here as a cheap
   // approximation: the card disables its own Save when not dirty, so a
   // user in edit mode with content will be detected. Belt-and-braces:
   // OR with the actual save-pending flag.
+  // hasSeeded: only emit dirty after the first render cycle so we never
+  // flicker dirty=true on mount while cards report isEditing=false.
+  const [hasSeeded, setHasSeeded] = useState(false);
+  useEffect(() => {
+    setHasSeeded(true);
+  }, []);
   const isSaving = saveMutation.isPending;
   useEffect(() => {
-    onDirtyChange?.(dirtyDeptIds.size > 0 || isSaving || saveMutation.isError);
-  }, [dirtyDeptIds, isSaving, saveMutation.isError, onDirtyChange]);
+    onDirtyChange?.(hasSeeded && (dirtyDeptIds.size > 0 || isSaving || saveMutation.isError));
+  }, [dirtyDeptIds, isSaving, saveMutation.isError, onDirtyChange, hasSeeded]);
 
   // Surface fetch errors.
   useEffect(() => {
@@ -329,3 +335,4 @@ export function DepartmentsAssignmentTab({
     </div>
   );
 }
+

@@ -36,6 +36,7 @@ const SchoolSetupCalendar = lazy(() => import("./pages/SchoolSetupCalendar.tsx")
 const MessengerPage = lazy(() => import("./pages/Messenger.tsx"));
 const Attendance = lazy(() => import("./pages/Attendance.tsx"));
 const Homework = lazy(() => import("./pages/Homework.tsx"));
+const TimetablePage = lazy(() => import("./pages/TimetablePage.tsx"));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-screen w-full">
@@ -79,18 +80,19 @@ const App = () => (
                   <Route path="/auth/staff/recover" element={<StaffRecovery />} />
                   <Route path="/auth/student/recover" element={<StudentRecovery />} />
                   <Route path="/super-admin" element={<ProtectedRoute allowedRoles={["superadmin"]}><SuperAdmin /></ProtectedRoute>} />
-                  <Route path="/school" element={<ProtectedRoute allowedRoles={["principal","admin"]}><SchoolPage /></ProtectedRoute>} />
+                  <Route path="/school" element={<ProtectedRoute allowedRoles={["principal", "admin"]}><SchoolPage /></ProtectedRoute>} />
                   <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
-                  <Route path="/school/onboarding" element={<ProtectedRoute allowedRoles={["principal","admin"]}><SchoolOnboarding /></ProtectedRoute>} />
-                  <Route path="/people" element={<ProtectedRoute allowedRoles={["principal","master_admin","admin"]}><MyStaff /></ProtectedRoute>} />
-                  <Route path="/my-staff" element={<ProtectedRoute allowedRoles={["principal","master_admin","admin"]}><MyStaff /></ProtectedRoute>} />
-                  <Route path="/students" element={<ProtectedRoute allowedRoles={["principal","admin"]}><Students /></ProtectedRoute>} />
-                  <Route path="/students/:id" element={<ProtectedRoute allowedRoles={["principal","admin"]}><StudentDetailPage /></ProtectedRoute>} />
+                  <Route path="/school/onboarding" element={<ProtectedRoute allowedRoles={["principal", "admin"]}><SchoolOnboarding /></ProtectedRoute>} />
+                  <Route path="/people" element={<ProtectedRoute allowedRoles={["principal", "master_admin", "admin"]}><MyStaff /></ProtectedRoute>} />
+                  <Route path="/my-staff" element={<ProtectedRoute allowedRoles={["principal", "master_admin", "admin"]}><MyStaff /></ProtectedRoute>} />
+                  <Route path="/students" element={<ProtectedRoute allowedRoles={["principal", "admin"]}><Students /></ProtectedRoute>} />
+                  <Route path="/students/:id" element={<ProtectedRoute allowedRoles={["principal", "admin"]}><StudentDetailPage /></ProtectedRoute>} />
                   <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-                  <Route path="/attendance" element={<ProtectedRoute allowedRoles={["class_teacher","coordinator","principal","master_admin","admin"]}><Attendance /></ProtectedRoute>} />
-                  <Route path="/school/setup/calendar" element={<ProtectedRoute allowedRoles={["principal","admin"]}><SchoolSetupCalendar /></ProtectedRoute>} />
-                  <Route path="/role-manager" element={<ProtectedRoute allowedRoles={["principal","master_admin","admin"]}><RoleManager /></ProtectedRoute>} />
+                  <Route path="/attendance" element={<ProtectedRoute allowedRoles={["class_teacher", "coordinator", "principal", "master_admin", "admin"]}><Attendance /></ProtectedRoute>} />
+                  <Route path="/school/setup/calendar" element={<ProtectedRoute allowedRoles={["principal", "admin"]}><SchoolSetupCalendar /></ProtectedRoute>} />
+                  <Route path="/role-manager" element={<ProtectedRoute allowedRoles={["principal", "master_admin", "admin"]}><RoleManager /></ProtectedRoute>} />
                   <Route path="/messenger" element={<ProtectedRoute><MessengerPage /></ProtectedRoute>} />
+                  <Route path="/timetable" element={<ProtectedRoute allowedRoles={["principal", "admin"]}><TimetablePage /></ProtectedRoute>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>

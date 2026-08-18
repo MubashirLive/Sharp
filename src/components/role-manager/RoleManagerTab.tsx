@@ -9,7 +9,16 @@ import { SubjectAssignmentGrid } from "./SubjectAssignmentGrid";
 import { WingsAssignmentTab } from "./WingsAssignmentTab";
 import { DepartmentsAssignmentTab } from "./DepartmentsAssignmentTab";
 import { HousesAssignmentTab } from "./HousesAssignmentTab";
-import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useStaffList, useRefreshStaffList } from "@/hooks/useRoleManagerQueries";
 
 export interface RoleFilters {
@@ -55,6 +64,9 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
   const [dirtyTabLabel, setDirtyTabLabel] = useState<string>("another tab");
   const anyDirty = Object.values(dirtyByTab).some(Boolean);
   const [pendingTab, setPendingTab] = useState<string | null>(null);
+  // Subject auto-save spinner state
+  const [subjectSaving, setSubjectSaving] = useState(false);
+  const [subjectSwitchPending, setSubjectSwitchPending] = useState<string | null>(null);
   // "Stay" / "Leave" choice for in-app nav block
   const [pendingNav, setPendingNav] = useState<null | ((shouldLeave: boolean) => void)>(null);
 
@@ -109,6 +121,11 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
 
   const handleTabChange = (next: string) => {
     if (next === activeTab) return;
+    // If subjects tab is currently auto-saving, defer the switch until save completes
+    if (activeTab === "subjects" && subjectSaving) {
+      setSubjectSwitchPending(next);
+      return;
+    }
     if (anyDirty) {
       // Find which tab reported dirty (for the modal's "from" label).
       const dirtyTab = Object.entries(dirtyByTab).find(([, v]) => v)?.[0];
@@ -119,10 +136,29 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
     }
   };
 
+  // When subject auto-save completes, auto-switch to pending tab
+  useEffect(() => {
+    if (!subjectSaving && subjectSwitchPending) {
+      if (anyDirty) {
+        const dirtyTab = Object.entries(dirtyByTab).find(([, v]) => v)?.[0];
+        if (dirtyTab) setDirtyTabLabel(TAB_LABELS[dirtyTab] ?? dirtyTab);
+        setPendingTab(subjectSwitchPending);
+      } else {
+        setActiveTab(subjectSwitchPending);
+      }
+      setSubjectSwitchPending(null);
+    }
+  }, [subjectSaving, subjectSwitchPending, anyDirty, dirtyByTab]);
+
   const discardAndSwitch = () => {
     setDirtyByTab({});
     if (pendingTab) setActiveTab(pendingTab);
     setPendingTab(null);
+  };
+
+  const keepEditing = () => {
+    setPendingTab(null);
+    setSubjectSwitchPending(null);
   };
 
   // Block in-app navigation (any route change) when dirty
@@ -210,6 +246,7 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
           schoolId={schoolId}
           canEdit={canEdit}
           onDirtyChange={(d) => setTabDirty("subjects", d)}
+          onSavingChange={(s) => setSubjectSaving(s)}
         />
       </TabsContent>
 
@@ -242,12 +279,36 @@ export function RoleManagerTab({ schoolId, canEdit }: RoleManagerTabProps) {
         />
       </TabsContent>
 
-      <UnsavedChangesDialog
-        open={pendingTab !== null}
-        fromTabLabel={dirtyTabLabel}
-        onDiscard={discardAndSwitch}
-        onCancel={() => setPendingTab(null)}
-      />
+      {/* Subject auto-save spinner overlay */}
+      {subjectSaving && subjectSwitchPending && (
+        <div className="fixed inset-0 bg-background/60 flex items-center justify-center z-50">
+          <div className="flex flex-col items-center gap-3 p-6 rounded-xl bg-card border shadow-lg">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-medium">Saving subject assignments…</p>
+            <p className="text-xs text-muted-foreground">Please wait before switching tabs.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Unsaved changes dialog — same AlertDialog pattern as My School */}
+      <AlertDialog open={pendingTab !== null} onOpenChange={(open) => { if (!open) keepEditing(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes in <strong>{dirtyTabLabel}</strong>.
+              <br />
+              If you leave now, your changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={keepEditing}>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={discardAndSwitch} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Tabs>
   );
 }

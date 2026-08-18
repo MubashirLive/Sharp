@@ -51,6 +51,11 @@ interface SubjectAssignmentGridProps {
    */
   onAssignmentChange?: () => void;
   /**
+   * Notify the parent when a save is in-flight. Parent uses this to block
+   * tab switches and show a loading overlay instead of the dirty modal.
+   */
+  onSavingChange?: (isSaving: boolean) => void;
+  /**
    * Notify the parent (RoleManagerTab) that this tab has unsaved changes.
    * For this auto-save tab: dirty = a save is in-flight OR the last save
    * failed. Matches My School SubjectTab pattern.
@@ -103,7 +108,7 @@ const getClassAcademicRank = (className: string): number => {
   return 100;
 };
 
-export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange, onDirtyChange }: SubjectAssignmentGridProps) {
+export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange, onDirtyChange, onSavingChange }: SubjectAssignmentGridProps) {
   const subjectsQuery = useSubjects(schoolId);
   const staffListQuery = useStaffList(schoolId);
   const sections = subjectsQuery.data?.sections ?? [];
@@ -124,12 +129,18 @@ export function SubjectAssignmentGrid({ schoolId, canEdit, onAssignmentChange, o
     }
   }, [subjectsQuery.error]);
 
-  // Dirty tracking — auto-save tab: dirty = save in-flight or errored.
-  // Mirrors the My School SubjectTab pattern. Once the next save resolves
-  // successfully the flag clears and the user can switch tabs freely.
+  // Dirty tracking — auto-save tab: dirty ONLY when the last save failed.
+  // While a save is in-flight we block tab-switch via onSavingChange (the
+  // parent shows a loading overlay) rather than the unsaved-changes modal.
   useEffect(() => {
-    onDirtyChange?.(saveStatus === "saving" || saveStatus === "error");
+    onDirtyChange?.(saveStatus === "error");
   }, [saveStatus, onDirtyChange]);
+
+  // Surface in-flight save state so the parent can block tab switches.
+  useEffect(() => {
+    onSavingChange?.(saveStatus === "saving");
+  }, [saveStatus, onSavingChange]);
+
 
   const cellKey = (sectionId: string, subjectId: string | null) =>
     `${sectionId}:${subjectId ?? "ct"}`;
