@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { View, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, ScrollView, TouchableOpacity, TextInput, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useGlobalSearchParams } from 'expo-router';
-import { ArrowLeft, Building2 } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
+
+const schoolLogo = require('@/assets/images/ideal-logo.jpg');
 
 export default function PhoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useGlobalSearchParams();
   
-  const schoolName = params.schoolName as string || 'Institution Name';
+  const schoolName = (params.schoolName as string) || 'Ideal International School, Indore';
 
   const [phoneNumber, setPhoneNumber] = useState('');
 
@@ -36,13 +38,17 @@ export default function PhoneScreen() {
         className="flex-row items-center justify-between px-5 bg-surface z-20"
         style={{ paddingTop: insets.top, height: 72 + insets.top }}
       >
-        <TouchableOpacity 
-          onPress={handleBack}
-          activeOpacity={0.7}
-          className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-surface-container-high"
-        >
-          <ArrowLeft size={24} color="#00355f" />
-        </TouchableOpacity>
+        {router.canGoBack() ? (
+          <TouchableOpacity 
+            onPress={handleBack}
+            activeOpacity={0.7}
+            className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-surface-container-high"
+          >
+            <ArrowLeft size={24} color="#00355f" />
+          </TouchableOpacity>
+        ) : (
+          <View className="w-12" />
+        )}
         
         <View className="absolute left-0 right-0 items-center pointer-events-none" style={{ top: insets.top + 24 }}>
           <Text className="text-[20px] leading-[26px] font-semibold text-primary">
@@ -60,10 +66,22 @@ export default function PhoneScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* School Hero Section */}
-        <View className="items-center mt-4 mb-10">
-          <View className="w-24 h-24 bg-surface-container-high rounded-full items-center justify-center mb-4 border border-outline-variant shadow-sm">
-            {/* Placeholder for School Logo */}
-            <Building2 size={40} color="#0058be" />
+        <View className="items-center mt-4 mb-8">
+          <View 
+            className="w-28 h-28 rounded-full bg-white items-center justify-center overflow-hidden mb-4 border border-outline-variant shadow-md"
+            style={{
+              shadowColor: '#00355f',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.12,
+              shadowRadius: 10,
+              elevation: 4,
+            }}
+          >
+            <Image
+              source={schoolLogo}
+              style={{ width: '100%', height: '100%', borderRadius: 56 }}
+              resizeMode="cover"
+            />
           </View>
           <Text className="text-[24px] leading-[30px] font-bold text-primary text-center px-4">
             {schoolName}

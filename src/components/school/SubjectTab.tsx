@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { AssignedSubject, isSeniorClass } from "@/data/subjects";
+import { AssignedSubject, isSeniorClass, isNonAcademicSubject } from "@/data/subjects";
 import { SubjectGrid } from "./SubjectGrid";
 import { SaveStatusIndicator } from "./SaveStatusIndicator";
 import { WingClassFilter } from "@/components/ui/WingClassFilter";
@@ -59,6 +59,10 @@ export function toSectionSubjects(
             code: s.subject_code,
             stream: s.stream ?? undefined,
             isCustom: !s.subject_code,
+            isNonAcademic: isNonAcademicSubject({
+              name: s.subject_name,
+              code: s.subject_code,
+            }),
           },
         ])
     ).values(),

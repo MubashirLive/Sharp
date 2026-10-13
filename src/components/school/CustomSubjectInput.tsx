@@ -8,9 +8,18 @@ import { toast } from "sonner";
 interface CustomSubjectInputProps {
   onAdd: (name: string, code: string) => void;
   existingCustomNames: string[];
+  placeholder?: string;
+  buttonLabel?: string;
+  codePrefix?: string;
 }
 
-export function CustomSubjectInput({ onAdd, existingCustomNames }: CustomSubjectInputProps) {
+export function CustomSubjectInput({
+  onAdd,
+  existingCustomNames,
+  placeholder = "Subject name",
+  buttonLabel = "Add Custom Subject",
+  codePrefix,
+}: CustomSubjectInputProps) {
   const [value, setValue] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
@@ -33,7 +42,8 @@ export function CustomSubjectInput({ onAdd, existingCustomNames }: CustomSubject
       return;
     }
 
-    const code = generateSubjectCode(trimmed);
+    const baseCode = generateSubjectCode(trimmed);
+    const code = codePrefix ? `${codePrefix}${baseCode}` : baseCode;
     onAdd(trimmed, code);
     setValue("");
     setIsAdding(false);
@@ -57,7 +67,7 @@ export function CustomSubjectInput({ onAdd, existingCustomNames }: CustomSubject
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/50 hover:border-foreground/30 rounded-md transition-colors w-full justify-center"
       >
         <Plus className="h-3.5 w-3.5" />
-        Add Custom Subject
+        {buttonLabel}
       </button>
     );
   }
@@ -68,7 +78,7 @@ export function CustomSubjectInput({ onAdd, existingCustomNames }: CustomSubject
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Subject name"
+        placeholder={placeholder}
         className="h-8 text-xs flex-1"
         autoFocus
       />

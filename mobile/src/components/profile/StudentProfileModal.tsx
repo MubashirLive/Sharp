@@ -7,9 +7,11 @@ import {
   ScrollView,
   Modal,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { X, LogOut } from 'lucide-react-native';
 
 // ─── Types ───────────────────────────────────────────────────────────
 export type SubjectTeacher = {
@@ -58,10 +60,34 @@ type Props = {
   visible: boolean;
   profile: StudentProfileData;
   onClose: () => void;
+  onLogout?: () => void;
 };
 
-export function StudentProfileModal({ visible, profile, onClose }: Props) {
+export function StudentProfileModal({ visible, profile, onClose, onLogout }: Props) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out from Student account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: () => {
+            onClose();
+            if (onLogout) {
+              onLogout();
+            } else {
+              router.replace('/(auth)/phone');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <Modal
@@ -181,7 +207,18 @@ export function StudentProfileModal({ visible, profile, onClose }: Props) {
             <InfoCell label="" value="" />
           </View>
 
-          <View style={{ height: 20 }} />
+          {/* ─── Log Out Button ──────────────────────────── */}
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+            accessibilityLabel="Log Out"
+          >
+            <LogOut size={18} color="#DC2626" />
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: Math.max(insets.bottom, 20) + 20 }} />
         </ScrollView>
       </View>
     </Modal>
@@ -437,5 +474,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginTop: 24,
+    gap: 8,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  logoutButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#DC2626',
+    letterSpacing: 0.3,
   },
 });

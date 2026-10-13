@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, GraduationCap, Eye, EyeOff } from "lucide-react";
 import { LoginCard } from "@/components/auth/LoginCard";
+import schoolLogo from "@/assets/ideal-logo.jpg";
 
 const emailSchema = z.string().trim().email("Enter a valid email").max(255);
 const passwordSchema = z.string().min(8, "At least 8 characters").max(100);
@@ -72,8 +73,7 @@ export default function AuthPage() {
 
   return (
     <LoginCard
-      brandingIcon={<GraduationCap className="h-8 w-8" />}
-      brandingLabel="SHARP"
+      logoSrc={schoolLogo}
       title="Welcome back"
       subtitle="Sign in to continue to your school dashboard"
       footer={

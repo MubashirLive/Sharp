@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CalendarCheck,
@@ -14,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ArrowUpRight,
+  MapPin,
 } from 'lucide-react-native';
 import {
   CalendarGrid,
@@ -25,11 +28,14 @@ type EventItem = {
   id: string;
   date: string; // "YYYY-MM-DD"
   time: string; // For sorting chronologically, e.g. "09:00 AM" or "02:30 PM"
-  title: string; // Event Name (e.g. "Doctors Day Celebration")
-  eventDate: string; // Formatted date string (e.g. "July 1, 2026")
-  publishedAt: string; // Publish timestamp (e.g. "June 28, 2026 · 10:00 AM")
+  title: string; // Event Name (e.g. "Parent-Teacher Association Meet")
+  eventDate: string; // Formatted date string (e.g. "July 25, 2026 · 03:00 PM")
+  publishedAt: string; // Publish timestamp (e.g. "July 23, 2026 · 04:00 PM")
   description: string;
-  category: 'event' | 'announcement' | 'holiday';
+  category: 'meeting' | 'announcement' | 'exam' | 'event' | 'holiday';
+  venue?: string;
+  actionLabel?: string;
+  targetRoute?: string;
 };
 
 const COLORS = {
@@ -179,63 +185,295 @@ const MOCK_EVENTS: EventItem[] = [
     id: '1',
     date: '2026-07-01',
     time: '09:00 AM',
-    title: "Doctors' Day Celebration",
-    eventDate: 'July 1, 2026',
+    title: "Doctors' Day Celebration & Health Panel",
+    eventDate: 'July 1, 2026 · 09:00 AM',
     publishedAt: 'June 28, 2026 · 10:00 AM',
-    description: 'We will be celebrating Doctors Day to honor our healthcare professionals. Students are requested to participate in the poster-making activity.',
-    category: 'event',
+    description: 'We will be celebrating Doctors Day to honor our healthcare professionals. Health panel talk and poster-making activity in the school auditorium.',
+    category: 'announcement',
+    venue: 'School Auditorium',
+    actionLabel: 'Go to Announcement',
+    targetRoute: '/announcements',
   },
   {
     id: '2',
     date: '2026-07-04',
     time: '10:00 AM',
-    title: 'Independence Day Special Planning',
-    eventDate: 'July 4, 2026',
+    title: 'Independence Day Cultural Rehearsal Notice',
+    eventDate: 'July 4, 2026 · 10:00 AM',
     publishedAt: 'July 2, 2026 · 09:30 AM',
-    description: 'Students from Classes 8-10 are requested to gather in the auditorium for the choir selection and dance rehearsal assignments.',
-    category: 'event',
+    description: 'Students from Classes 8-10 are requested to gather in the auditorium for choir selection, marching drill, and dance rehearsal assignments.',
+    category: 'announcement',
+    venue: 'School Auditorium',
+    actionLabel: 'Go to Announcement',
+    targetRoute: '/announcements',
   },
   {
     id: '3',
-    date: '2026-07-15',
-    time: '09:00 AM',
-    title: 'Summer Camp Briefing',
-    eventDate: 'July 15, 2026',
-    publishedAt: 'July 12, 2026 · 02:00 PM',
-    description: 'Parents and students are requested to attend the online briefing session for details regarding schedules, locations, and kit lists.',
-    category: 'announcement',
+    date: '2026-07-08',
+    time: '09:30 AM',
+    title: 'Term-1 Periodic Exam: Physics & Mechanics',
+    eventDate: 'July 8, 2026 · 09:30 AM',
+    publishedAt: 'July 1, 2026 · 11:00 AM',
+    description: 'Periodic Assessment covering Kinematics, Laws of Motion, and Work-Energy theorem for Secondary grades (9 & 10).',
+    category: 'exam',
+    venue: 'Examination Wing - Room 204',
+    actionLabel: 'Go to Exam',
+    targetRoute: '/exam',
   },
   {
     id: '4',
-    date: '2026-07-15',
-    time: '02:00 PM',
-    title: 'Annual Sports Meet Setup',
-    eventDate: 'July 15, 2026',
-    publishedAt: 'July 14, 2026 · 08:00 AM',
-    description: 'P.E. teachers and house captains will coordinate the ground layout and distribution of sports materials after lunch.',
-    category: 'event',
+    date: '2026-07-10',
+    time: '03:30 PM',
+    title: 'Mid-Term Paper Moderation Committee Meeting',
+    eventDate: 'July 10, 2026 · 03:30 PM',
+    publishedAt: 'July 7, 2026 · 02:00 PM',
+    description: 'Academic Council moderation meeting for finalization of question paper blueprints, marking rubrics, and answer keys.',
+    category: 'meeting',
+    venue: 'Conference Hall #1 (Building B)',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
   },
   {
     id: '5',
-    date: '2026-07-20',
-    time: '11:00 AM',
-    title: 'Science Exhibition Announcement',
-    eventDate: 'July 20, 2026',
-    publishedAt: 'July 18, 2026 · 11:30 AM',
-    description: 'Registration is open for the upcoming annual science exhibition. Submit your project abstracts to your science teacher.',
+    date: '2026-07-15',
+    time: '09:00 AM',
+    title: 'Summer Camp Briefing & Activity Schedule',
+    eventDate: 'July 15, 2026 · 09:00 AM',
+    publishedAt: 'July 12, 2026 · 02:00 PM',
+    description: 'Parents and students are requested to review the briefing circular for workshop schedules, kit lists, and safety guidelines.',
     category: 'announcement',
+    venue: 'Online via School Portal',
+    actionLabel: 'Go to Announcement',
+    targetRoute: '/announcements',
   },
   {
     id: '6',
+    date: '2026-07-16',
+    time: '10:00 AM',
+    title: 'Mathematics Unit Assessment 1 (Algebra & Calculus)',
+    eventDate: 'July 16, 2026 · 10:00 AM',
+    publishedAt: 'July 10, 2026 · 09:00 AM',
+    description: 'Unit test for Grade 11 & 12 Commerce and Science streams. Duration: 90 mins. Non-programmable calculators permitted.',
+    category: 'exam',
+    venue: 'Block C - Examination Halls',
+    actionLabel: 'Go to Exam',
+    targetRoute: '/exam',
+  },
+  {
+    id: '7',
+    date: '2026-07-18',
+    time: '02:30 PM',
+    title: 'Commerce & Economics Dept. Curriculum Sync',
+    eventDate: 'July 18, 2026 · 02:30 PM',
+    publishedAt: 'July 15, 2026 · 11:00 AM',
+    description: 'Review syllabus progress, project evaluation guidelines, and scheduling of board candidate doubt-clearing sessions.',
+    category: 'meeting',
+    venue: 'Staff Room #3 (Commerce Cabin)',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
+  },
+  {
+    id: '8',
+    date: '2026-07-20',
+    time: '11:00 AM',
+    title: 'Science Exhibition Registration & Abstract Call',
+    eventDate: 'July 20, 2026 · 11:00 AM',
+    publishedAt: 'July 18, 2026 · 11:30 AM',
+    description: 'Registration is open for the upcoming annual science exhibition. Submit your model proposals and abstracts to your department head.',
+    category: 'announcement',
+    venue: 'Main Science Laboratory Wing',
+    actionLabel: 'Go to Announcement',
+    targetRoute: '/announcements',
+  },
+  {
+    id: '9',
+    date: '2026-07-22',
+    time: '10:30 AM',
+    title: 'Academic Council Orientation & NEP Compliance',
+    eventDate: 'July 22, 2026 · 10:30 AM',
+    publishedAt: 'July 19, 2026 · 04:00 PM',
+    description: 'Discussion on competency-based assessment guidelines, experiential lesson planning, and faculty CPD module completion.',
+    category: 'meeting',
+    venue: 'Conference Hall #2',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
+  },
+  {
+    id: '10',
+    date: '2026-07-24',
+    time: '08:30 AM',
+    title: 'Chemistry & Biology Laboratory Practical Assessment',
+    eventDate: 'July 24, 2026 · 08:30 AM',
+    publishedAt: 'July 18, 2026 · 03:00 PM',
+    description: 'Mid-term practicals evaluation. Lab coats and safety goggles mandatory. Bring signed lab observation records.',
+    category: 'exam',
+    venue: 'Chemistry Lab #2',
+    actionLabel: 'Go to Exam',
+    targetRoute: '/exam',
+  },
+  {
+    id: '11',
     date: '2026-07-25',
     time: '03:00 PM',
     title: 'Parent-Teacher Association Meet',
-    eventDate: 'July 25, 2026',
+    eventDate: 'July 25, 2026 · 03:00 PM',
     publishedAt: 'July 23, 2026 · 04:00 PM',
-    description: 'PTA meeting will be conducted in the main hall. Discussion topics include curriculum updates and the upcoming sports meet planning.',
-    category: 'event',
+    description: 'PTA meeting will be conducted in the main hall. Discussion topics include curriculum updates, digital report cards, and upcoming sports meet planning.',
+    category: 'meeting',
+    venue: 'School Auditorium',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
+  },
+  {
+    id: '12',
+    date: '2026-07-29',
+    time: '11:00 AM',
+    title: 'Computer Science Practical Test (Python & SQL)',
+    eventDate: 'July 29, 2026 · 11:00 AM',
+    publishedAt: 'July 24, 2026 · 10:00 AM',
+    description: 'Hands-on programming assessment in Python and SQL database operations for Senior Secondary students.',
+    category: 'exam',
+    venue: 'Computer Lab #1',
+    actionLabel: 'Go to Exam',
+    targetRoute: '/exam',
+  },
+  {
+    id: '13',
+    date: '2026-08-12',
+    time: '09:00 AM',
+    title: 'Term-1 Mid-Term Examination: Physics',
+    eventDate: 'August 12, 2026 · 09:00 AM',
+    publishedAt: 'August 5, 2026 · 10:00 AM',
+    description: 'Official 3-hour Term-1 theory examination for Senior Secondary classes. Hall tickets required.',
+    category: 'exam',
+    venue: 'Main Examination Wing',
+    actionLabel: 'Go to Exam',
+    targetRoute: '/exam',
+  },
+  {
+    id: '14',
+    date: '2026-08-18',
+    time: '03:00 PM',
+    title: 'Curriculum Progress Review & Sports Day Prep Meeting',
+    eventDate: 'August 18, 2026 · 03:00 PM',
+    publishedAt: 'August 14, 2026 · 02:00 PM',
+    description: 'Staff council review meeting covering Term-1 syllabus completion and inter-house sports calendar approvals.',
+    category: 'meeting',
+    venue: 'Staff Room #3',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
+  },
+  {
+    id: '15',
+    date: '2026-08-20',
+    time: '10:00 AM',
+    title: 'Digital Marks Portal & Report Card Sync Announcement',
+    eventDate: 'August 20, 2026 · 10:00 AM',
+    publishedAt: 'August 18, 2026 · 09:00 AM',
+    description: 'All faculty must finalize and lock class test marks on the new school digital evaluation portal by end of week.',
+    category: 'announcement',
+    venue: 'Faculty Portal Circular',
+    actionLabel: 'Go to Announcement',
+    targetRoute: '/announcements',
+  },
+  {
+    id: '16',
+    date: '2026-08-22',
+    time: '09:30 AM',
+    title: 'Accountancy & Business Studies Term Examination',
+    eventDate: 'August 22, 2026 · 09:30 AM',
+    publishedAt: 'August 15, 2026 · 11:00 AM',
+    description: 'Term-1 written paper for Grade 11 & 12 Commerce cohorts. Financial statements and project evaluation rubrics.',
+    category: 'exam',
+    venue: 'Building B - Hall 102',
+    actionLabel: 'Go to Exam',
+    targetRoute: '/exam',
+  },
+  {
+    id: '17',
+    date: '2026-08-26',
+    time: '03:30 PM',
+    title: 'Mid-Term Exam Paper Moderation & Digital Evaluation Protocol',
+    eventDate: 'August 26, 2026 · 03:30 PM',
+    publishedAt: 'August 24, 2026 · 09:00 AM',
+    description: 'Mandatory meeting chaired by the Principal on question paper moderation, internal practicals, and marks portal implementation.',
+    category: 'meeting',
+    venue: 'Main Conference Hall #1 (Building B)',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
+  },
+  {
+    id: '18',
+    date: '2026-08-27',
+    time: '11:00 AM',
+    title: 'Commerce & Economics Dept. Curriculum Sync & Term Plan',
+    eventDate: 'August 27, 2026 · 11:00 AM',
+    publishedAt: 'August 25, 2026 · 08:30 AM',
+    description: 'Review syllabus completion rate, standardized project rubrics, and schedule extra doubt-clearing sessions.',
+    category: 'meeting',
+    venue: 'Staff Room #3 (Commerce Cabin)',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
+  },
+  {
+    id: '19',
+    date: '2026-08-28',
+    time: '02:00 PM',
+    title: 'PTA Core Committee & Grade 10 Academic Progress Review',
+    eventDate: 'August 28, 2026 · 02:00 PM',
+    publishedAt: 'August 26, 2026 · 10:00 AM',
+    description: 'Finalization of staggered PTM slots, parent feedback framework, and stream selection orientation workshop schedule.',
+    category: 'meeting',
+    venue: 'School Auditorium & Hybrid Meet',
+    actionLabel: 'View Meeting Info',
+    targetRoute: '/(student)',
   },
 ];
+
+function getCategoryInfo(category: EventItem['category']) {
+  switch (category) {
+    case 'meeting':
+      return {
+        label: 'Meeting',
+        bg: '#E0F2FE',
+        fg: '#0369A1',
+        actionLabel: 'View Meeting',
+        defaultRoute: '/(student)',
+      };
+    case 'exam':
+      return {
+        label: 'Exam',
+        bg: '#F3E8FF',
+        fg: '#7C3AED',
+        actionLabel: 'Go to Exam',
+        defaultRoute: '/exam',
+      };
+    case 'announcement':
+      return {
+        label: 'Announcement',
+        bg: '#FEF3C7',
+        fg: '#B45309',
+        actionLabel: 'Go to Announcement',
+        defaultRoute: '/announcements',
+      };
+    case 'holiday':
+      return {
+        label: 'Holiday',
+        bg: '#FEE2E2',
+        fg: '#DC2626',
+        actionLabel: 'View Calendar',
+        defaultRoute: '',
+      };
+    default:
+      return {
+        label: 'Event',
+        bg: '#DCFCE7',
+        fg: '#15803D',
+        actionLabel: 'View Details',
+        defaultRoute: '/announcements',
+      };
+  }
+}
 
 function timeToMinutes(time: string) {
   const match = time.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
@@ -294,17 +532,32 @@ function EventCard({
   item,
   expanded,
   onToggle,
+  onNavigate,
 }: {
   item: EventItem;
   expanded: boolean;
   onToggle: () => void;
+  onNavigate: (item: EventItem) => void;
 }) {
   const isHoliday = item.category === 'holiday';
+  const catInfo = getCategoryInfo(item.category);
 
   return (
     <View style={[styles.card, isHoliday && styles.holidayCard]}>
-      <View style={styles.cardHeader}>
+      {/* Header: Category Badge, Title, Execution Date, Published Timestamp, Down Chevron */}
+      <TouchableOpacity
+        activeOpacity={0.75}
+        style={styles.cardHeader}
+        onPress={onToggle}
+      >
         <View style={styles.cardMain}>
+          <View style={styles.cardHeaderTopRow}>
+            <View style={[styles.categoryBadge, { backgroundColor: catInfo.bg }]}>
+              <Text style={[styles.categoryBadgeText, { color: catInfo.fg }]}>
+                {catInfo.label}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.cardTitle}>{item.title}</Text>
           <Text style={styles.eventDateText}>{item.eventDate}</Text>
         </View>
@@ -318,24 +571,41 @@ function EventCard({
           >
             {item.publishedAt}
           </Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? 'Collapse details' : 'Expand details'}
-            style={styles.chevronButton}
-            onPress={onToggle}
-          >
+          <View style={styles.chevronButton}>
             {expanded ? (
               <ChevronUp size={18} color={COLORS.textMuted} />
             ) : (
               <ChevronDown size={18} color={COLORS.textMuted} />
             )}
-          </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
+      {/* Expanded View: Venue, Description, Go Button */}
       {expanded ? (
         <View style={styles.details}>
+          {item.venue ? (
+            <View style={styles.venueRow}>
+              <MapPin size={13} color={COLORS.secondary} />
+              <Text style={styles.venueText}>{item.venue}</Text>
+            </View>
+          ) : null}
+
           <Text style={styles.description}>{item.description}</Text>
+
+          {/* Context-aware Go button */}
+          {catInfo.defaultRoute ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.goButton}
+              onPress={() => onNavigate(item)}
+            >
+              <Text style={styles.goButtonText}>
+                {item.actionLabel || catInfo.actionLabel}
+              </Text>
+              <ArrowUpRight size={14} color="#ffffff" strokeWidth={2.5} />
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -343,12 +613,23 @@ function EventCard({
 }
 
 export default function CalendarScreen() {
-  const [selectedDate, setSelectedDate] = useState('2026-07-01');
+  const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState('2026-07-25');
   const [visibleMonth, setVisibleMonth] = useState(() => {
-    const date = toDate('2026-07-01');
+    const date = toDate('2026-07-25');
     return new Date(date.getFullYear(), date.getMonth(), 1);
   });
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+
+  const handleNavigate = useCallback(
+    (item: EventItem) => {
+      const route = item.targetRoute || getCategoryInfo(item.category).defaultRoute;
+      if (route) {
+        router.push(route as any);
+      }
+    },
+    [router]
+  );
 
   const eventsByDate = useMemo(() => {
     return MOCK_EVENTS.reduce<Record<string, EventItem[]>>((acc, event) => {
@@ -492,6 +773,7 @@ export default function CalendarScreen() {
                     [item.id]: !current[item.id],
                   }))
                 }
+                onNavigate={handleNavigate}
               />
             ))
           ) : !selectedHolidayReason ? (
@@ -675,6 +957,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+  },
+  cardHeaderTopRow: {
+    marginBottom: 4,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  venueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 8,
+  },
+  venueText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.secondary,
+  },
+  goButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#000000',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  goButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   cardMain: {
     flex: 1,

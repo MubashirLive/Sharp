@@ -20,10 +20,12 @@ export default function RootLayout() {
       <Stack.Screen name="group-chat" />
       <Stack.Screen name="broadcast-channel" />
       <Stack.Screen name="timetable" />
+      <Stack.Screen name="teacher-timetable" />
       <Stack.Screen name="announcements" />
       <Stack.Screen name="exam" />
       <Stack.Screen name="test" />
       <Stack.Screen name="mark-attendance" />
+      <Stack.Screen name="study-material" />
     </Stack>
   );
 }

@@ -1,0 +1,307 @@
+# Auth System Implementation Plan — SHARP Rebuild
+
+> Phase 1: Core authentication for the school portal (Principal + Teacher + Student)
+
+---
+
+## Finalized Decisions (From Discussion)
+
+All decisions below were agreed upon in our architecture discussion. This section exists as a reference — not for re-debate.
+
+### Teacher & Student Auth
+| Aspect | Decision |
+|---|---|
+| First login | **Mobile-only**. No web first-time login. |
+| Activation | Phone → OTP → Set 6-digit PIN → Account activated → Device = primary |
+| PIN visibility | PIN viewable inside the mobile app (stored locally in Keychain/Keystore, hashed on server) |
+| Web login | Phone + 6-digit PIN (no OTP, no password) |
+| New mobile login | Phone + 6-digit PIN → becomes additional device |
+| Lost device recovery | OTP → Reset PIN → Set new primary device (admin-initiated lock if SIM stolen) |
+| Session (mobile) | Persistent (30-day refresh token). Phone's own lock screen = security. |
+| Session (web) | 2-hour idle timeout default. "Stay signed in" checkbox → 7-day session. |
+| QR scan login | **Phase 2** — WhatsApp Web style, deferred |
+| Student | Same as teacher, mobile-only platform |
+
+### Principal Auth
+| Aspect | Decision |
+|---|---|
+| Account creation | SuperAdmin creates → system generates activation link → sent to email |
+| Activation | Click link → verify mobile OTP → set password (12+ chars) → setup TOTP (mandatory) |
+| Daily login (trusted device) | Email + Password |
+| New device login | Email + Password + TOTP code |
+| Password reset | Email reset link → new password + verify TOTP. Lost TOTP → SuperAdmin reset. |
+| Session | 15-min access token + 30-day refresh. "Trust device" prompt on new device. |
+
+### System-Wide
+| Aspect | Decision |
+|---|---|
+| School selector | **None**. Server resolves school from credentials. Mini-picker only if phone maps to 2+ schools. |
+| Self-signup | **None**. All accounts provisioned by authorized roles. |
+| Password hashing | Argon2id |
+| Token strategy | RS256 JWT (15-min access) + HttpOnly Secure SameSite=Strict cookie (refresh) |
+| Rate limiting | Redis sliding window |
+| OTP delivery | MSG91 (SMS) + Resend/SES (email) |
+
+### Deferred to Phase 2
+- Company website (SuperAdmin/SalesAdmin portal)
+- QR scan web login (WhatsApp Web style)
+- Push-to-approve from mobile app
+- Biometric app-level lock
+
+---
+
+## Proposed Changes
+
+### PostgreSQL — Auth Schema
+
+#### [NEW] `migrations/001_auth_tables.sql`
+
+Core identity and auth tables. All tables created in a single migration for atomic deployment.
+
+**Tables:**
+
+| Table | Purpose |
+|---|---|
+| `users` | Core identity — id, email, phone, role, school_id, status, password_hash, pin_hash, totp_secret_enc |
+| `schools` | School identity — name, slug, emblem, state, city, status (already exists, extended) |
+| `trusted_devices` | Per-user device trust — fingerprint, device_name, last_used_at |
+| `refresh_tokens` | Token rotation with family tracking — token_hash, family_id, expires_at, replaced_by |
+| `otp_codes` | OTP storage with expiry — user_id, channel, purpose, code_hash, attempts |
+| `login_attempts` | Audit trail — user_id, identifier, method, success, ip, user_agent |
+| `activation_tokens` | One-time activation links — user_id, token_hash, expires_at |
+
+**Key constraints:**
+- `UNIQUE(phone, school_id)` on users — same phone can exist across schools
+- `email UNIQUE` globally for principals/superadmins
+- `CHECK` constraints on role, status enums
+- Conditional `NOT NULL` — email required for principal/superadmin, phone required for school users
+
+**Indexes:**
+- `users(email)` WHERE email IS NOT NULL
+- `users(phone, school_id)` WHERE phone IS NOT NULL
+- `users(school_id, role)`
+- `users(staff_app_id)`, `users(student_app_id)`
+- `refresh_tokens(user_id)` WHERE revoked_at IS NULL
+- `refresh_tokens(family_id)` for rotation detection
+- `login_attempts(user_id, created_at DESC)`
+- `login_attempts(ip_address, created_at DESC)`
+
+---
+
+### FastAPI Backend — Auth Service
+
+#### [NEW] `backend/app/auth/` — Auth module
+
+```
+backend/
+├── app/
+│   ├── main.py                      # FastAPI app entry
+│   ├── config.py                    # Settings (JWT keys, DB URL, Redis URL, SMS/email config)
+│   ├── database.py                  # AsyncPG connection pool
+│   ├── redis.py                     # Redis client for rate limiting + OTP throttle
+│   │
+│   ├── auth/
+│   │   ├── __init__.py
+│   │   ├── router.py                # All auth endpoints (mounted as /api/v1/auth)
+│   │   ├── schemas.py               # Pydantic request/response models
+│   │   ├── service.py               # Core auth business logic
+│   │   ├── tokens.py                # JWT creation/validation (RS256), refresh token rotation
+│   │   ├── hashing.py               # Argon2id wrapper for passwords, PINs, OTPs
+│   │   ├── otp.py                   # OTP generation, delivery (MSG91/Resend), verification
+│   │   ├── totp.py                  # TOTP setup/verification (pyotp)
+│   │   ├── rate_limiter.py          # Redis sliding window rate limiter
+│   │   ├── device.py                # Device fingerprinting + trust management
+│   │   ├── dependencies.py          # FastAPI deps: get_current_user, require_role, etc.
+│   │   └── constants.py             # PIN length, OTP expiry, lockout thresholds, etc.
+│   │
+│   ├── admin/
+│   │   ├── __init__.py
+│   │   ├── router.py                # Admin auth operations (create user, reset PIN, lock account)
+│   │   └── service.py               # Admin auth business logic
+│   │
+│   └── middleware/
+│       ├── __init__.py
+│       ├── security_headers.py      # HSTS, CSP, X-Frame-Options, etc.
+│       └── request_logging.py       # Request audit logging
+│
+├── requirements.txt
+├── Dockerfile
+└── alembic/                         # DB migrations via Alembic
+    └── versions/
+        └── 001_auth_tables.py
+```
+
+#### Auth Endpoints
+
+**Public (no auth required):**
+
+| Method | Path | Purpose | Rate Limit |
+|---|---|---|---|
+| `POST` | `/auth/login/password` | Principal/SuperAdmin: email + password | 5/15min per IP+email |
+| `POST` | `/auth/login/pin` | Teacher/Student: phone/appId + PIN | 5/15min per IP+phone |
+| `POST` | `/auth/login/totp-verify` | Principal: TOTP code after password on new device | 5/15min per user |
+| `POST` | `/auth/otp/send` | Send OTP for activation/recovery | 3/10min per phone |
+| `POST` | `/auth/otp/verify` | Verify OTP code | 3 per code |
+| `POST` | `/auth/activate/teacher` | Teacher/Student: OTP verified → set PIN | 1 per user (idempotent) |
+| `POST` | `/auth/activate/principal` | Principal: set password + TOTP via activation link | 1 per token |
+| `POST` | `/auth/activate/totp-setup` | Principal: generate TOTP QR + backup codes | Requires activation session |
+| `POST` | `/auth/activate/totp-confirm` | Principal: verify first TOTP code to finalize | Requires activation session |
+| `POST` | `/auth/password/forgot` | Send reset link to principal email | 3/hour per email |
+| `POST` | `/auth/password/reset` | Set new password via reset token + TOTP | 1 per token |
+| `POST` | `/auth/pin/reset` | Reset PIN via verified OTP | 1 per OTP session |
+| `POST` | `/auth/token/refresh` | Exchange refresh token for new access token | 30/min |
+| `POST` | `/auth/resolve-identity` | Given phone/appId, return profile card data (name, avatar, school) | 10/min per IP |
+
+**Authenticated:**
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/auth/me` | Current user profile + role + school |
+| `POST` | `/auth/logout` | Revoke current refresh token + clear cookie |
+| `POST` | `/auth/logout-all` | Revoke ALL sessions |
+| `GET` | `/auth/devices` | List trusted devices |
+| `DELETE` | `/auth/devices/{id}` | Revoke a trusted device |
+| `POST` | `/auth/pin/change` | Change PIN (requires current PIN) |
+
+**Admin-only:**
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/admin/auth/create-user` | Provision a new account (principal/teacher/student) |
+| `POST` | `/admin/auth/lock-account` | Lock a user account (lost device scenario) |
+| `POST` | `/admin/auth/unlock-account` | Unlock a locked account |
+| `POST` | `/admin/auth/reset-pin` | Admin-initiated PIN reset for staff/student |
+| `POST` | `/admin/auth/reset-principal` | SuperAdmin resets principal password + TOTP |
+
+---
+
+### React Web — Auth Pages
+
+#### [NEW] `web/src/pages/auth/` — Login pages
+
+| File | Purpose |
+|---|---|
+| `PrincipalLogin.tsx` | Email + password form. On new device → TOTP prompt. "Forgot password?" link. |
+| `TeacherLogin.tsx` | Phone/StaffID input → profile card display → 6-digit PIN entry. "Forgot PIN?" link. |
+| `PrincipalActivation.tsx` | Activation link landing → mobile OTP verify → set password → TOTP setup wizard |
+| `ForgotPassword.tsx` | Email input → "Reset link sent" confirmation |
+| `ResetPassword.tsx` | Reset link landing → new password + TOTP verify |
+| `ForgotPIN.tsx` | Phone input → OTP → set new PIN |
+
+#### [NEW] `web/src/contexts/AuthContext.tsx` — Auth state management
+
+- Stores access token in memory (React state/ref)
+- Refresh token in HttpOnly cookie (managed by browser, not JS)
+- Auto-refresh: intercept 401 → call `/auth/token/refresh` → retry
+- Exposes: `user`, `role`, `school`, `isAuthenticated`, `login()`, `logout()`
+- Protected route wrapper: `<RequireAuth allowedRoles={['principal']}>`
+
+#### [NEW] `web/src/lib/api.ts` — API client
+
+- Axios/fetch wrapper with interceptors
+- Auto-attach access token to Authorization header
+- 401 → refresh → retry logic
+- Base URL from env
+
+---
+
+### Expo Mobile — Auth Screens
+
+#### [MODIFY] `mobile/src/app/(auth)/` — Update existing auth screens
+
+| File | Change |
+|---|---|
+| `phone.tsx` | Refactor: phone input → call `/auth/resolve-identity` → show profile card OR "First time? Let's activate" |
+| `otp.tsx` | Refactor: OTP input → call `/auth/otp/verify` → if activation → redirect to PIN setup |
+| `login.tsx` | Refactor: PIN input → call `/auth/login/pin` → store tokens |
+| `profiles.tsx` | Keep: multi-profile picker for phone numbers with 2+ schools |
+
+#### [NEW] `mobile/src/app/(auth)/set-pin.tsx`
+
+- 6-digit PIN setup screen (after OTP verification during activation)
+- Confirm PIN screen
+- Stores PIN in device secure storage (expo-secure-store)
+- Calls `/auth/activate/teacher` with PIN
+
+#### [NEW] `mobile/src/app/(auth)/forgot-pin.tsx`
+
+- Phone input → OTP → set new PIN
+- Calls `/auth/pin/reset`
+
+#### [NEW] `mobile/src/lib/secure-store.ts`
+
+- Wrapper around `expo-secure-store` for PIN storage
+- `storePin(pin: string)` — saves to Keychain/Keystore
+- `getPin(): string | null` — retrieves for "View PIN" feature
+- `clearPin()` — on logout/account reset
+
+#### [NEW] `mobile/src/screens/settings/ViewPIN.tsx`
+
+- "My Login PIN" settings screen
+- Requires biometric authentication (expo-local-authentication) to reveal
+- Shows 6-digit PIN from secure store
+- "Change PIN" button → current PIN → new PIN → confirm
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Backend project structure:** This plan creates a new `backend/` directory at the repo root for the FastAPI backend, and assumes the React web app will live in `web/` (or continue in `prototype/`). The mobile app stays in `mobile/`. Is this directory structure okay, or do you want a monorepo layout?
+
+> [!IMPORTANT]
+> **Web app location:** Your prototype is in `prototype/` with a basic Vite + React setup. Should we:
+> - **Option A:** Continue building in `prototype/` and rename it later
+> - **Option B:** Create a new `web/` directory with a fresh Vite + React + shadcn + Tailwind setup
+> - **Option C:** Something else
+
+> [!WARNING]
+> **Database:** You're moving from Supabase-managed Postgres to your own Postgres. Where will the new database be hosted? Options: Supabase (just the database, not auth), Neon, Railway, AWS RDS, self-hosted. This affects the migration strategy.
+
+> [!IMPORTANT]
+> **SMS Provider:** You mentioned MSG91 in the old system. Are you sticking with MSG91 for OTP delivery, or switching? This affects the OTP service implementation.
+
+## Open Questions
+
+1. **Multi-school teacher edge case:** We agreed the server resolves school from phone number. If a teacher works at 2 schools (same phone), the `/auth/resolve-identity` endpoint returns both profiles and shows a picker. Do you want to support this from day 1, or defer it?
+
+2. **Login notification delivery:** We agreed to notify the primary device on every web login. Should this be a push notification (requires FCM setup) or an in-app notification (simpler, but user sees it only when they open the app)?
+
+3. **"Stay signed in" on web:** Should this be a visible checkbox on the login form, or should we default to shorter sessions and add it later based on user feedback?
+
+4. **Activation link expiry:** We said 48h for principal activation links. What about teacher OTP expiry — 5 minutes (standard) or 10 minutes (more forgiving for teachers who might be slow with OTPs)?
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+```bash
+# Backend unit tests (auth service, token handling, hashing)
+cd backend && pytest tests/auth/ -v
+
+# Backend integration tests (full login flows against test DB)
+cd backend && pytest tests/integration/auth/ -v
+
+# Frontend component tests
+cd web && npm run test
+```
+
+### Manual Verification
+
+| Test Case | Steps | Expected |
+|---|---|---|
+| Teacher activation (mobile) | Open app → enter phone → receive OTP → enter OTP → set PIN → confirm PIN | Account status = `active`, PIN hash stored, device registered as primary |
+| Teacher web login | Open web → enter phone → see profile card → enter PIN | JWT issued, session active, idle timeout works |
+| Teacher wrong PIN (5x) | Enter wrong PIN 5 times on web | Account locked, "Account locked" screen shown, auto-unlock after 1 hour |
+| Teacher forgot PIN | Tap "Forgot PIN" → enter phone → OTP → set new PIN | New PIN works, old PIN rejected, old sessions revoked |
+| Principal activation | Click email link → verify mobile OTP → set password → setup TOTP → verify code | Account active, TOTP enabled, redirected to onboarding |
+| Principal daily login (trusted) | Enter email + password on trusted device | Logged in without TOTP prompt |
+| Principal new device | Enter email + password on new device | TOTP prompt shown, login completes after valid code |
+| Principal forgot password | Click "Forgot password" → receive email → click link → new password + TOTP | Password changed, old sessions revoked |
+| Session timeout (web) | Log in → idle for 2+ hours | Auto-logout, redirected to login page |
+| Admin lock account | Principal locks teacher account from admin panel | Teacher's all sessions revoked, login returns "Account locked" |
+| PIN viewable in app | Settings → "My Login PIN" → biometric prompt → reveal | PIN displayed correctly, matches what was set |
+| Multi-school phone | Phone exists in 2 schools → enter on web/mobile | School picker shown with both school names + emblems |
+| Rate limiting | Send 4 OTPs in 10 min to same number | 4th attempt blocked with "Too many requests" |

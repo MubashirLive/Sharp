@@ -35,6 +35,24 @@ type AnnouncementItem = {
 
 const INITIAL_ANNOUNCEMENTS: AnnouncementItem[] = [
   {
+    id: 'an0',
+    title: 'Welcome to Ideal International School, Indore',
+    body: 'Official academic orientation and schedule for Session 2026-27 is now published on the portal.',
+    targetAudience: 'All Faculty & Students',
+    date: '10 Sep 2026',
+    views: 3120,
+    urgent: true,
+  },
+  {
+    id: 'an-ptm',
+    title: 'Upcoming Mid-Term Parent-Teacher Meeting',
+    body: 'Faculty consultation slots and academic review schedule have been finalized for Saturday.',
+    targetAudience: 'Parents & Teachers',
+    date: '10 Sep 2026',
+    views: 1840,
+    urgent: true,
+  },
+  {
     id: 'an1',
     title: 'Mid-Term Examination Schedule & Syllabus Release',
     body: 'The comprehensive date sheet for Mid-Term Examinations (Session 2026-27) for Grades 6 through 12 has been published.',

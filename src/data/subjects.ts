@@ -135,10 +135,39 @@ export const generateSubjectCode = (name: string): string => {
     .slice(0, 4);
 };
 
+// Non-academic subject library
+export const NON_ACADEMIC_SUBJECTS: SubjectItem[] = [
+  { name: "Swimming", code: "SWM" },
+  { name: "Dance", code: "DNC" },
+  { name: "Music", code: "MUS" },
+  { name: "Sports", code: "SPO" },
+  { name: "Mess", code: "MSS" },
+  { name: "Yoga", code: "YOG" },
+  { name: "Library", code: "LIB" },
+  { name: "Art and Craft", code: "ART" },
+  { name: "Martial Arts", code: "MA" },
+  { name: "Assembly", code: "ASM" },
+  { name: "Karate", code: "KRT" },
+];
+
+const NON_ACADEMIC_SET = new Set(
+  NON_ACADEMIC_SUBJECTS.map((s) => s.name.toLowerCase())
+);
+
+/** Checks if a subject is non-academic (by flag, code prefix, or predefined library lookup) */
+export const isNonAcademicSubject = (
+  subject: { name: string; code?: string | null; isNonAcademic?: boolean }
+): boolean => {
+  if (subject.isNonAcademic) return true;
+  if (subject.code?.startsWith("NA_")) return true;
+  return NON_ACADEMIC_SET.has(subject.name.toLowerCase().trim());
+};
+
 // Assigned subject type (stored in DB via section_subjects)
 export interface AssignedSubject {
   name: string;
   code: string | null; // null for custom subjects
   stream?: string;
   isCustom?: boolean;
+  isNonAcademic?: boolean;
 }

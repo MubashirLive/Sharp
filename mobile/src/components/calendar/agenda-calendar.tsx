@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
   LayoutAnimation,
   PanResponder,
   ScrollView,
@@ -15,7 +16,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
+  ExternalLink,
+  FileText,
+  Globe,
+  Image as ImageIcon,
   Paperclip,
+  Tag,
 } from 'lucide-react-native';
 import { CalendarGrid, toDate, toDateKey, sameMonth } from './CalendarGrid';
 
@@ -43,6 +50,11 @@ export type AgendaItem = {
   title: string;
   description: string;
   owner: string;
+  className?: string;
+  section?: string;
+  teacherName?: string;
+  chapter?: string;
+  chapterId?: string;
   attachments?: AgendaAttachment[];
 };
 
@@ -52,6 +64,7 @@ type AgendaCalendarProps = {
   categories: AgendaCategory[];
   initialDate?: string;
   itemCountLabel?: string;
+  subHeader?: React.ReactNode;
 };
 
 const COLORS = {
@@ -148,6 +161,60 @@ function compactSubjectLabel(label: string) {
   return label.trim().toUpperCase().slice(0, 3);
 }
 
+function getAttachmentMeta(attachment: AgendaAttachment) {
+  const lower = attachment.label.toLowerCase();
+  const isLink =
+    attachment.kind === 'link' ||
+    attachment.label.startsWith('http') ||
+    lower.includes('video') ||
+    lower.includes('link') ||
+    lower.includes('guide');
+
+  if (isLink) {
+    return {
+      type: 'LINK',
+      icon: Globe,
+      color: '#4F46E5',
+      bgColor: '#EEF2FF',
+      actionLabel: 'Open Link',
+    };
+  }
+  if (lower.endsWith('.pdf') || lower.includes('pdf')) {
+    return {
+      type: 'PDF',
+      icon: FileText,
+      color: '#DC2626',
+      bgColor: '#FEE2E2',
+      actionLabel: 'Preview',
+    };
+  }
+  if (lower.endsWith('.doc') || lower.endsWith('.docx') || lower.includes('doc')) {
+    return {
+      type: 'DOC',
+      icon: FileText,
+      color: '#2563EB',
+      bgColor: '#DBEAFE',
+      actionLabel: 'Download',
+    };
+  }
+  if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return {
+      type: 'IMAGE',
+      icon: ImageIcon,
+      color: '#059669',
+      bgColor: '#D1FAE5',
+      actionLabel: 'View Image',
+    };
+  }
+  return {
+    type: 'FILE',
+    icon: Paperclip,
+    color: '#7C3AED',
+    bgColor: '#F3E8FF',
+    actionLabel: 'Open File',
+  };
+}
+
 function AgendaCard({
   item,
   category,
@@ -160,6 +227,10 @@ function AgendaCard({
   onToggle: () => void;
 }) {
   const attachmentCount = item.attachments?.length ?? 0;
+  const classSectionText = item.className && item.section ? `${item.className} · ${item.section}` : (item.className || item.owner || 'Grade 10 · Section A');
+  const teacherName = item.teacherName || 'Ms. Priya Singh';
+  const chapterName = item.chapter || 'Chapter 3: Quadratic Equations';
+  const isUncategorised = chapterName === 'Uncategorised';
 
   return (
     <TouchableOpacity
@@ -169,47 +240,147 @@ function AgendaCard({
       accessibilityRole="button"
       accessibilityLabel={expanded ? 'Collapse details' : 'Expand details'}
     >
+      {/* ── Top Header: Subject - Class/Section + (Time & Chevron on Top Right) ── */}
       <View style={styles.cardHeader}>
         <View style={styles.cardMain}>
+          {/* 1. In place where teacher is written, write the class and section */}
           <View style={styles.subjectRow}>
-            <BookOpen size={16} color={category.iconColor} strokeWidth={2.2} />
+            <BookOpen size={14} color={category.iconColor} strokeWidth={2.2} />
             <Text style={styles.subjectText}>{category.label}</Text>
             <Text style={styles.subjectDash}>-</Text>
-            <Text style={styles.ownerText}>{item.owner}</Text>
+            <Text style={styles.classSectionText}>{classSectionText}</Text>
           </View>
-          <Text style={styles.cardTitle}>{item.title}</Text>
+
+          {/* 2. Below the subject: Name of the teacher in small font */}
+          <Text style={styles.teacherNameText}>{teacherName}</Text>
         </View>
 
-        <View style={styles.cardMeta}>
-          <Text style={styles.timePill}>{item.time}</Text>
-          <View style={styles.chevronButton}>
+        {/* 4 & 5. Top Right: Time in short, small font + Small Chevron indicator */}
+        <View style={styles.topRightWrap}>
+          <View style={styles.timeWrap}>
+            <Clock size={10} color={COLORS.textMuted} strokeWidth={2} />
+            <Text style={styles.timeText}>{item.time}</Text>
+          </View>
+          <View style={styles.chevronIndicator}>
             {expanded ? (
-              <ChevronUp size={18} color={COLORS.textMuted} />
+              <ChevronUp size={12} color={COLORS.textMuted} strokeWidth={2.4} />
             ) : (
-              <ChevronDown size={18} color={COLORS.textMuted} />
+              <ChevronDown size={12} color={COLORS.textMuted} strokeWidth={2.4} />
             )}
           </View>
         </View>
       </View>
 
-      {attachmentCount > 0 ? (
-        <View style={styles.attachmentPill}>
-          <Paperclip size={13} color={COLORS.secondary} />
-          <Text style={styles.attachmentPillText}>
-            {attachmentCount} attachment{attachmentCount > 1 ? 's' : ''}
+      {/* 3. Title of the Homework */}
+      <Text style={styles.cardTitle}>{item.title}</Text>
+
+      {/* 6. Below the title: Curriculum tag */}
+      <View style={styles.chapterRow}>
+        <View
+          style={[
+            styles.chapterBadge,
+            isUncategorised && styles.chapterBadgeUncategorised,
+          ]}
+        >
+          <Tag
+            size={10}
+            color={isUncategorised ? '#64748B' : '#047857'}
+            strokeWidth={2.2}
+          />
+          <Text
+            style={[
+              styles.chapterBadgeText,
+              isUncategorised && styles.chapterBadgeTextUncategorised,
+            ]}
+            numberOfLines={1}
+          >
+            {chapterName}
           </Text>
+        </View>
+      </View>
+
+      {/* ── Attachments Bar (Visible at glance) ── */}
+      {attachmentCount > 0 && !expanded ? (
+        <View style={styles.attachmentPillsRow}>
+          {item.attachments?.slice(0, 2).map((att) => {
+            const meta = getAttachmentMeta(att);
+            const IconComp = meta.icon;
+            return (
+              <TouchableOpacity
+                key={att.id}
+                style={[styles.attachmentChip, { backgroundColor: meta.bgColor }]}
+                activeOpacity={0.75}
+                onPress={() => {
+                  Alert.alert('Attachment', `Opening ${att.label}...`);
+                }}
+              >
+                <IconComp size={11} color={meta.color} strokeWidth={2.4} />
+                <Text style={[styles.attachmentChipText, { color: meta.color }]} numberOfLines={1}>
+                  {att.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {attachmentCount > 2 && (
+            <View style={styles.moreAttachmentsChip}>
+              <Text style={styles.moreAttachmentsText}>+{attachmentCount - 2} more</Text>
+            </View>
+          )}
         </View>
       ) : null}
 
+      {/* ── Expandable Details (Description + Full Rich Attachment Tiles) ── */}
       {expanded ? (
-        <View style={styles.details}>
-          <Text style={styles.description}>{item.description}</Text>
-          {item.attachments?.map((attachment) => (
-            <View key={attachment.id} style={styles.attachmentRow}>
-              <Paperclip size={15} color={COLORS.secondary} />
-              <Text style={styles.attachmentLabel}>{attachment.label}</Text>
+        <View style={styles.expandedContent}>
+          {/* Description */}
+          {item.description ? (
+            <View style={styles.descriptionBox}>
+              <Text style={styles.descriptionText}>{item.description}</Text>
             </View>
-          ))}
+          ) : null}
+
+          {/* Attachments Section */}
+          {attachmentCount > 0 && (
+            <View style={styles.attachmentsSection}>
+              <View style={styles.attachmentsSectionHeader}>
+                <Paperclip size={12} color="#64748B" strokeWidth={2.2} />
+                <Text style={styles.attachmentsSectionTitle}>
+                  Attached Materials ({attachmentCount})
+                </Text>
+              </View>
+
+              <View style={styles.attachmentCardsList}>
+                {item.attachments?.map((att) => {
+                  const meta = getAttachmentMeta(att);
+                  const IconComp = meta.icon;
+                  return (
+                    <TouchableOpacity
+                      key={att.id}
+                      style={styles.attachmentCard}
+                      activeOpacity={0.75}
+                      onPress={() => Alert.alert('Attachment', `Opening ${att.label}...`)}
+                    >
+                      <View style={[styles.attachmentIconBox, { backgroundColor: meta.bgColor }]}>
+                        <IconComp size={15} color={meta.color} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.attachmentCardInfo}>
+                        <Text style={styles.attachmentCardName} numberOfLines={1}>
+                          {att.label}
+                        </Text>
+                        <Text style={styles.attachmentCardType}>{meta.type}</Text>
+                      </View>
+                      <View style={[styles.attachmentActionBtn, { borderColor: meta.color }]}>
+                        <Text style={[styles.attachmentActionText, { color: meta.color }]}>
+                          {meta.actionLabel}
+                        </Text>
+                        <ExternalLink size={10} color={meta.color} strokeWidth={2.4} />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
         </View>
       ) : null}
     </TouchableOpacity>
@@ -222,6 +393,7 @@ export function AgendaCalendar({
   categories,
   initialDate = toDateKey(new Date()),
   itemCountLabel = 'Assignments',
+  subHeader,
 }: AgendaCalendarProps) {
   const [mode, setMode] = useState<AgendaCalendarMode>('hidden');
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -355,6 +527,7 @@ export function AgendaCalendar({
 
       </View>
 
+      {subHeader}
 
       {!isHidden ? (
         isFull ? (
@@ -805,109 +978,215 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: 8,
   },
   cardMain: {
     flex: 1,
-    marginRight: 12,
   },
   subjectRow: {
-    marginBottom: 5,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   subjectText: {
-    marginLeft: 8,
     color: COLORS.text,
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 13.5,
+    lineHeight: 18,
     fontWeight: '800',
   },
   subjectDash: {
-    marginHorizontal: 5,
     color: COLORS.textMuted,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
-  ownerText: {
-    color: COLORS.textMuted,
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '500',
-  },
-  cardTitle: {
-    color: COLORS.text,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '500',
-  },
-  cardMeta: {
-    alignItems: 'flex-end',
-  },
-  timePill: {
-    overflow: 'hidden',
-    borderRadius: 999,
-    backgroundColor: COLORS.surfaceContainer,
-    color: COLORS.textMuted,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+  classSectionText: {
+    color: '#4338CA',
     fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+    lineHeight: 17,
+    fontWeight: '700',
   },
-  chevronButton: {
-    marginTop: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  teacherNameText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  topRightWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 1,
+    alignSelf: 'flex-start',
+  },
+  timeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  timeText: {
+    color: COLORS.textMuted,
+    fontSize: 10.5,
+    fontWeight: '500',
+  },
+  chevronIndicator: {
+    padding: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  attachmentPill: {
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    borderRadius: 999,
-    backgroundColor: COLORS.surfaceContainer,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  attachmentPillText: {
-    marginLeft: 6,
-    color: COLORS.textMuted,
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
-  details: {
-    marginTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.outline,
-    paddingTop: 12,
-  },
-  description: {
-    color: COLORS.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  attachmentRow: {
-    marginTop: 10,
-    borderRadius: 12,
-    backgroundColor: COLORS.surfaceLow,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  attachmentLabel: {
-    flex: 1,
-    marginLeft: 8,
+  cardTitle: {
     color: COLORS.text,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 14.5,
+    lineHeight: 20,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  chapterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  chapterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3.5,
+    maxWidth: '100%',
+  },
+  chapterBadgeUncategorised: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  chapterBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  chapterBadgeTextUncategorised: {
+    color: '#64748B',
+  },
+  // Attachments Chips (Collapsed Glance)
+  attachmentPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  attachmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    maxWidth: 180,
+  },
+  attachmentChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  moreAttachmentsChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 6,
+  },
+  moreAttachmentsText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+
+  // Expanded View
+  expandedContent: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  descriptionBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
+  },
+  descriptionText: {
+    color: '#334155',
+    fontSize: 12.5,
+    lineHeight: 18.5,
+  },
+  attachmentsSection: {
+    marginTop: 4,
+  },
+  attachmentsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  attachmentsSectionTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  attachmentCardsList: {
+    gap: 6,
+  },
+  attachmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 8,
+    gap: 8,
+  },
+  attachmentIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentCardInfo: {
+    flex: 1,
+  },
+  attachmentCardName: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#1E293B',
+    lineHeight: 16,
+  },
+  attachmentCardType: {
+    fontSize: 10,
     fontWeight: '600',
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  attachmentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3.5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  attachmentActionText: {
+    fontSize: 10.5,
+    fontWeight: '700',
   },
   emptyState: {
     marginTop: 40,

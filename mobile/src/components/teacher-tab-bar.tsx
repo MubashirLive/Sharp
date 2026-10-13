@@ -8,10 +8,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  LayoutDashboard,
+  GraduationCap,
   UserCheck,
   BookOpen,
-  Users,
+  Calendar,
   MessageCircle,
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -26,11 +26,11 @@ import { Colors, Spacing, TabBarHeight } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const TEACHER_TAB_CONFIG: Record<string, { Icon: LucideIcon; label: string }> = {
-  chat:         { Icon: MessageCircle,   label: 'Chat' },
-  attendance:   { Icon: UserCheck,       label: 'Attendance' },
-  index:        { Icon: LayoutDashboard, label: 'Home' },
-  homework:     { Icon: BookOpen,        label: 'Homework' },
-  'my-classes': { Icon: Users,           label: 'Classes' },
+  chat:       { Icon: MessageCircle,   label: 'Chat' },
+  attendance: { Icon: UserCheck,       label: 'Attendance' },
+  index:      { Icon: GraduationCap,  label: 'Home' },
+  homework:   { Icon: BookOpen,        label: 'Homework' },
+  calendar:   { Icon: Calendar,        label: 'Calendar' },
 };
 
 function TabButton({

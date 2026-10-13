@@ -2,7 +2,8 @@ import { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface LoginCardProps {
-  brandingIcon: ReactNode;
+  brandingIcon?: ReactNode;
+  logoSrc?: string;
   brandingLabel?: string;
   title: string;
   subtitle?: string;
@@ -14,6 +15,7 @@ interface LoginCardProps {
 
 export function LoginCard({
   brandingIcon,
+  logoSrc,
   brandingLabel,
   title,
   subtitle,
@@ -27,9 +29,25 @@ export function LoginCard({
 
         {/* Branding block */}
         <div className="flex flex-col items-center mb-7">
-          <div className="login-branding-icon mb-4">
-            {brandingIcon}
-          </div>
+          {logoSrc ? (
+            <div className="relative mb-5 flex items-center justify-center">
+              {/* Subtle ambient glow */}
+              <div className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-indigo-500/25 to-purple-500/25 blur-lg pointer-events-none" />
+
+              <div className="relative w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-white p-1.5 ring-4 ring-white/90 shadow-xl shadow-indigo-950/15 border border-slate-200/80 flex items-center justify-center overflow-hidden transition-all duration-300 hover:scale-105">
+                <img
+                  src={logoSrc}
+                  alt="School Logo"
+                  className="w-full h-full object-contain rounded-full mix-blend-multiply select-none"
+                  draggable={false}
+                />
+              </div>
+            </div>
+          ) : brandingIcon ? (
+            <div className="login-branding-icon mb-4">
+              {brandingIcon}
+            </div>
+          ) : null}
           {brandingLabel && (
             <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-[hsl(var(--login-text-muted))] mb-1.5">
               {brandingLabel}

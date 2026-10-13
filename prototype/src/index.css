@@ -1,0 +1,511 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHARP Prototype — Design System v2
+   Inspired by the existing claymorphism system, elevated to premium
+═══════════════════════════════════════════════════════════════════ */
+
+/* Instant theme transitions — avoids layout reflow */
+html { transition: background-color 0.2s ease, color 0.2s ease; }
+
+@layer base {
+  :root {
+    --radius: 1rem;
+
+    --background: 270 100% 98%;
+    --foreground: 270 50% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 270 50% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 270 50% 10%;
+
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 270 50% 95%;
+    --secondary-foreground: 270 50% 20%;
+
+    --muted: 270 50% 95%;
+    --muted-foreground: 270 15% 45%;
+
+    --accent: 25 95% 53%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 270 20% 90%;
+    --input: 270 20% 90%;
+    --ring: 262 83% 58%;
+  }
+
+  .dark {
+    --background: 260 25% 7%;
+    --foreground: 270 20% 95%;
+
+    --card: 260 25% 10%;
+    --card-foreground: 270 20% 95%;
+
+    --popover: 260 25% 10%;
+    --popover-foreground: 270 20% 95%;
+
+    --primary: 262 83% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 260 20% 16%;
+    --secondary-foreground: 270 20% 90%;
+
+    --muted: 260 20% 15%;
+    --muted-foreground: 270 15% 65%;
+
+    --accent: 25 95% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 260 20% 18%;
+    --input: 260 20% 18%;
+    --ring: 262 83% 65%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1, h2, h3, h4 {
+    @apply tracking-tight;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   Login Screen — Premium Glassmorphism + Animated Mesh Background
+═══════════════════════════════════════════════════════════════════ */
+
+.login-scene {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  position: relative;
+}
+
+@media (max-width: 1024px) {
+  .login-scene {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Left Panel: Animated Brand Showcase ── */
+.login-brand-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    hsl(262 83% 18%) 0%,
+    hsl(262 83% 30%) 30%,
+    hsl(270 67% 40%) 60%,
+    hsl(262 83% 35%) 100%
+  );
+}
+
+@media (max-width: 1024px) {
+  .login-brand-panel {
+    display: none;
+  }
+}
+
+/* Mesh gradient orbs */
+.login-brand-panel::before,
+.login-brand-panel::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.4;
+}
+
+.login-brand-panel::before {
+  width: 500px;
+  height: 500px;
+  background: hsl(270 67% 55%);
+  top: -10%;
+  right: -15%;
+  animation: float 8s ease-in-out infinite;
+}
+
+.login-brand-panel::after {
+  width: 400px;
+  height: 400px;
+  background: hsl(25 95% 53%);
+  bottom: -10%;
+  left: -10%;
+  animation: float 10s ease-in-out infinite reverse;
+}
+
+/* ── Right Panel: Form Area ── */
+.login-form-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background: linear-gradient(
+    180deg,
+    hsl(270 100% 99%) 0%,
+    hsl(270 100% 97%) 100%
+  );
+  position: relative;
+}
+
+/* Subtle grid texture */
+.login-form-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, hsl(262 83% 58% / 0.03) 1px, transparent 0);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+/* ── Glass Card ── */
+.login-glass-card {
+  width: 100%;
+  max-width: 420px;
+  background: hsl(0 0% 100% / 0.85);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-radius: 1.5rem;
+  border: 1px solid hsl(270 20% 90% / 0.8);
+  box-shadow:
+    0 4px 24px hsl(262 83% 58% / 0.08),
+    0 1px 4px hsl(262 83% 58% / 0.04),
+    inset 0 1px 0 hsl(0 0% 100% / 0.6);
+  padding: 2.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Inputs ── */
+.proto-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 1rem;
+  border-radius: 0.875rem;
+  border: 1.5px solid hsl(270 20% 88%);
+  background: hsl(270 100% 99.5%);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: hsl(270 50% 10%);
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.proto-input::placeholder {
+  color: hsl(270 15% 55%);
+  font-weight: 400;
+}
+
+.proto-input:hover {
+  border-color: hsl(262 83% 58% / 0.3);
+}
+
+.proto-input:focus {
+  border-color: hsl(262 83% 58%);
+  box-shadow:
+    0 0 0 3px hsl(262 83% 58% / 0.12),
+    0 2px 8px hsl(262 83% 58% / 0.06);
+}
+
+/* ── Primary Button ── */
+.proto-btn-primary {
+  width: 100%;
+  min-height: 52px;
+  border: none;
+  border-radius: 0.875rem;
+  background: linear-gradient(135deg, hsl(262 83% 58%), hsl(262 83% 48%));
+  color: white;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 4px 16px hsl(262 83% 58% / 0.35),
+    0 2px 4px hsl(262 83% 58% / 0.15);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.proto-btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, hsl(0 0% 100% / 0.15), transparent);
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.proto-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 28px hsl(262 83% 58% / 0.45),
+    0 4px 8px hsl(262 83% 58% / 0.2);
+}
+
+.proto-btn-primary:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.proto-btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.proto-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Role selection cards ── */
+.role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
+  border-radius: 1.125rem;
+  border: 1.5px solid hsl(270 20% 90%);
+  background: hsl(0 0% 100% / 0.7);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  color: inherit;
+}
+
+.role-card:hover {
+  border-color: hsl(262 83% 58% / 0.4);
+  background: hsl(262 83% 58% / 0.04);
+  transform: translateY(-4px);
+  box-shadow:
+    0 8px 32px hsl(262 83% 58% / 0.12),
+    0 2px 8px hsl(262 83% 58% / 0.06);
+}
+
+.role-card:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.role-card-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 14px var(--icon-shadow, hsl(262 83% 58% / 0.3));
+}
+
+/* ── Divider ── */
+.proto-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: hsl(270 15% 55%);
+  font-size: 0.8125rem;
+}
+
+.proto-divider::before,
+.proto-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(270 20% 85%),
+    transparent
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Dark Mode Component Overrides
+═══════════════════════════════════════════════════════════════════ */
+
+.dark .login-form-panel {
+  background: linear-gradient(
+    180deg,
+    hsl(260 25% 9%) 0%,
+    hsl(260 25% 7%) 100%
+  );
+}
+
+.dark .login-form-panel::before {
+  background-image: radial-gradient(circle at 1px 1px, hsl(262 83% 65% / 0.08) 1px, transparent 0);
+}
+
+.dark .login-glass-card {
+  background: hsl(260 25% 10% / 0.88);
+  border-color: hsl(260 20% 20% / 0.8);
+  box-shadow:
+    0 4px 24px hsl(0 0% 0% / 0.45),
+    0 1px 4px hsl(0 0% 0% / 0.25),
+    inset 0 1px 0 hsl(270 20% 95% / 0.08);
+}
+
+.dark .proto-input {
+  background: hsl(260 25% 12%);
+  border-color: hsl(260 20% 22%);
+  color: hsl(270 20% 95%);
+}
+
+.dark .proto-input::placeholder {
+  color: hsl(270 15% 50%);
+}
+
+.dark .proto-input:hover {
+  border-color: hsl(262 83% 65% / 0.4);
+}
+
+.dark .proto-input:focus {
+  background: hsl(260 25% 13%);
+  border-color: hsl(262 83% 65%);
+  box-shadow:
+    0 0 0 3px hsl(262 83% 65% / 0.2),
+    0 2px 8px hsl(0 0% 0% / 0.3);
+}
+
+.dark .role-card {
+  background: hsl(260 25% 11% / 0.7);
+  border-color: hsl(260 20% 20%);
+  color: hsl(270 20% 95%);
+}
+
+.dark .role-card:hover {
+  border-color: hsl(262 83% 65% / 0.45);
+  background: hsl(262 83% 65% / 0.12);
+  box-shadow:
+    0 8px 32px hsl(0 0% 0% / 0.4),
+    0 2px 8px hsl(262 83% 65% / 0.15);
+}
+
+.dark .proto-divider {
+  color: hsl(270 15% 55%);
+}
+
+.dark .proto-divider::before,
+.dark .proto-divider::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(260 20% 25%),
+    transparent
+  );
+}
+
+/* ── Custom Dark Mode Scrollbars ── */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: hsl(260 25% 8%);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(260 20% 22%);
+  border-radius: 9999px;
+  border: 2px solid hsl(260 25% 8%);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(262 83% 65% / 0.5);
+}
+
+
+/* ── Floating shapes for brand panel ── */
+.brand-shape {
+  position: absolute;
+  border-radius: 30%;
+  background: hsl(0 0% 100% / 0.05);
+  border: 1px solid hsl(0 0% 100% / 0.08);
+  backdrop-filter: blur(2px);
+}
+
+/* ── Animations ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-reveal {
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-reveal-delay-1 {
+  opacity: 0;
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+}
+
+.animate-reveal-delay-2 {
+  opacity: 0;
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+}
+
+.animate-reveal-delay-3 {
+  opacity: 0;
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+}
+
+.animate-reveal-delay-4 {
+  opacity: 0;
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+}
+
+.animate-reveal-delay-5 {
+  opacity: 0;
+  animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+}

@@ -16,7 +16,7 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const handleLogout = () => {
-    router.replace('/(auth)/login');
+    router.replace('/(auth)/phone');
   };
 
   return (

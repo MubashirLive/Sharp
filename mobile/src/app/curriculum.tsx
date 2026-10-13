@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,15 @@ import {
   ChevronRight,
   Sparkles,
   Layers,
-  FileText,
   CheckCircle2,
   Library,
   BookMarked,
   Download,
   Paperclip,
+  PenTool,
 } from 'lucide-react-native';
 import { MOCK_CURRICULUM_DATA, SubjectCurriculumData } from '@/data/curriculumData';
+import { useCurriculumStore } from '@/data/curriculumStore';
 
 const C = {
   primary: '#7C3AED',
@@ -42,10 +43,49 @@ const C = {
 export default function CurriculumScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const curriculumData = useCurriculumStore();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('subj-math');
 
   const activeSubject: SubjectCurriculumData =
-    MOCK_CURRICULUM_DATA.find((s) => s.id === selectedSubjectId) || MOCK_CURRICULUM_DATA[0];
+    curriculumData.find((s) => s.id === selectedSubjectId) || curriculumData[0] || MOCK_CURRICULUM_DATA[0];
+
+  // Dynamic total homework count for active subject across all books and chapters
+  const totalSubjectHomeworks = useMemo(() => {
+    let count = 0;
+    activeSubject.books.forEach((book) => {
+      if (book.parts) {
+        book.parts.forEach((p) => {
+          p.chapters.forEach((ch) => {
+            count += ch.homeworks ? ch.homeworks.length : 0;
+          });
+        });
+      } else if (book.directChapters) {
+        book.directChapters.forEach((ch) => {
+          count += ch.homeworks ? ch.homeworks.length : 0;
+        });
+      }
+    });
+    return count;
+  }, [activeSubject]);
+
+  // Dynamic total study materials count for active subject across all books and chapters
+  const totalSubjectMaterials = useMemo(() => {
+    let count = 0;
+    activeSubject.books.forEach((book) => {
+      if (book.parts) {
+        book.parts.forEach((p) => {
+          p.chapters.forEach((ch) => {
+            count += ch.materials ? ch.materials.length : 0;
+          });
+        });
+      } else if (book.directChapters) {
+        book.directChapters.forEach((ch) => {
+          count += ch.materials ? ch.materials.length : 0;
+        });
+      }
+    });
+    return count;
+  }, [activeSubject]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -74,7 +114,7 @@ export default function CurriculumScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.pillScrollContent}
         >
-          {MOCK_CURRICULUM_DATA.map((item) => {
+          {curriculumData.map((item) => {
             const isSelected = item.id === selectedSubjectId;
             return (
               <TouchableOpacity
@@ -97,7 +137,7 @@ export default function CurriculumScreen() {
                     isSelected ? styles.pillTextActive : styles.pillTextInactive,
                   ]}
                 >
-                  {item.subjectName}
+                  {item.grade} · {item.subjectName}
                 </Text>
               </TouchableOpacity>
             );
@@ -143,26 +183,41 @@ export default function CurriculumScreen() {
             />
           </View>
 
-          {/* Overall Stats */}
+          {/* Overall Stats (4 Sections) */}
           <View style={styles.overviewStatsRow}>
+            {/* 1. Books / References */}
             <View style={styles.statBox}>
-              <Library size={16} color={C.primary} />
+              <Library size={15} color={C.primary} />
               <Text style={styles.statValue}>{activeSubject.totalBooks}</Text>
               <Text style={styles.statLabel}>Books / References</Text>
             </View>
             <View style={styles.statDivider} />
+
+            {/* 2. Chapters Taught */}
             <View style={styles.statBox}>
-              <CheckCircle2 size={16} color={C.success} />
+              <CheckCircle2 size={15} color={C.success} />
               <Text style={styles.statValue}>
                 {activeSubject.completedChapters}/{activeSubject.totalChapters}
               </Text>
               <Text style={styles.statLabel}>Chapters Taught</Text>
             </View>
             <View style={styles.statDivider} />
+
+            {/* 3. Study Material */}
             <View style={styles.statBox}>
-              <Paperclip size={16} color={C.accent} />
-              <Text style={styles.statValue}>{activeSubject.totalMaterials}</Text>
-              <Text style={styles.statLabel}>Study Materials</Text>
+              <Paperclip size={15} color={C.accent} />
+              <Text style={styles.statValue}>{totalSubjectMaterials}</Text>
+              <Text style={styles.statLabel}>Study Material</Text>
+            </View>
+            <View style={styles.statDivider} />
+
+            {/* 4. Homework(s) */}
+            <View style={styles.statBox}>
+              <PenTool size={15} color="#7C3AED" />
+              <Text style={[styles.statValue, { color: '#7C3AED' }]}>
+                {totalSubjectHomeworks}
+              </Text>
+              <Text style={styles.statLabel}>Homework(s)</Text>
             </View>
           </View>
         </View>
@@ -177,6 +232,19 @@ export default function CurriculumScreen() {
 
         {/* Books List */}
         {activeSubject.books.map((book) => {
+          let bookHwCount = 0;
+          if (book.parts) {
+            book.parts.forEach((p) => {
+              p.chapters.forEach((ch) => {
+                bookHwCount += ch.homeworks ? ch.homeworks.length : 0;
+              });
+            });
+          } else if (book.directChapters) {
+            book.directChapters.forEach((ch) => {
+              bookHwCount += ch.homeworks ? ch.homeworks.length : 0;
+            });
+          }
+
           return (
             <TouchableOpacity
               key={book.id}
@@ -232,11 +300,22 @@ export default function CurriculumScreen() {
 
               {/* Bottom Meta Bar */}
               <View style={styles.bookFooter}>
-                <View style={styles.materialChip}>
-                  <Paperclip size={12} color={C.primary} />
-                  <Text style={styles.materialChipText}>
-                    {book.totalMaterials} Teacher Materials Attached
-                  </Text>
+                <View style={styles.bookFooterChipsRow}>
+                  <View style={styles.materialChip}>
+                    <Paperclip size={11} color="#059669" />
+                    <Text style={[styles.materialChipText, { color: '#059669' }]}>
+                      {book.totalMaterials} Materials
+                    </Text>
+                  </View>
+
+                  {bookHwCount > 0 && (
+                    <View style={[styles.materialChip, { backgroundColor: '#F3E8FF' }]}>
+                      <PenTool size={11} color="#7C3AED" />
+                      <Text style={[styles.materialChipText, { color: '#7C3AED' }]}>
+                        {bookHwCount} Homework
+                      </Text>
+                    </View>
+                  )}
                 </View>
 
                 <Text style={styles.exploreText}>View Syllabus →</Text>
@@ -244,17 +323,6 @@ export default function CurriculumScreen() {
             </TouchableOpacity>
           );
         })}
-
-        {/* Global Materials Handout Banner */}
-        <View style={styles.infoBanner}>
-          <FileText size={20} color={C.primary} />
-          <View style={styles.infoBannerTextWrap}>
-            <Text style={styles.infoBannerTitle}>Organized Teacher Study Hub</Text>
-            <Text style={styles.infoBannerSub}>
-              All uploaded notes, worksheets, and videos are linked to their respective chapters.
-            </Text>
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -439,11 +507,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderRadius: 14,
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 6,
   },
   statBox: {
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 2,
   },
   statDivider: {
     width: 1,
@@ -451,16 +520,16 @@ const styles = StyleSheet.create({
     backgroundColor: C.border,
   },
   statValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: C.text,
     marginTop: 3,
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
     color: C.textMuted,
-    marginTop: 1,
+    marginTop: 2,
     textAlign: 'center',
   },
 
@@ -581,6 +650,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },
+  bookFooterChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   materialChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -599,31 +673,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: C.primary,
-  },
-
-  // Info Banner
-  infoBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: C.primaryBg,
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-    marginTop: 6,
-  },
-  infoBannerTextWrap: {
-    flex: 1,
-  },
-  infoBannerTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: C.primary,
-  },
-  infoBannerSub: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: C.textMuted,
-    marginTop: 2,
-    lineHeight: 16,
   },
 });

@@ -38,6 +38,7 @@ import {
   ClipboardList,
   Users,
   Hash,
+  FileText,
 } from 'lucide-react-native';
 
 // ─── Design Tokens ───────────────────────────────────────────────────
@@ -71,6 +72,8 @@ const C = {
   resultFg: '#FF9500',
   curriculumBg: '#F3E8FF',
   curriculumFg: '#7C3AED',
+  materialBg: '#D1FAE5',
+  materialFg: '#059669',
   // Schedule accents
   mathColor: '#000000',
   physicsColor: '#34AADC',
@@ -115,7 +118,7 @@ const INITIAL_PROFILES: StudentProfile[] = [
     grade: 'Grade 10',
     section: 'A',
     rollNo: '14',
-    school: 'St. Xavier High School',
+    school: 'Ideal International School, Indore',
     avatarBg: '#000000',
     initials: 'AJ',
     attendance: 88,
@@ -151,7 +154,7 @@ const INITIAL_PROFILES: StudentProfile[] = [
     grade: 'Grade 5',
     section: 'B',
     rollNo: '08',
-    school: 'St. Xavier Primary School',
+    school: 'Ideal International School, Indore',
     avatarBg: '#EC4899',
     initials: 'SJ',
     attendance: 96,
@@ -222,6 +225,7 @@ const QUICK_ACCESS = [
   { key: 'timetable', label: 'Timetable', Icon: CalendarDays, bg: C.timetableBg, fg: C.timetableFg, route: '/timetable' },
   { key: 'result', label: 'Result', Icon: ClipboardCheck, bg: C.resultBg, fg: C.resultFg, route: '/timetable' },
   { key: 'curriculum', label: 'Curriculum', Icon: BookOpen, bg: C.curriculumBg, fg: C.curriculumFg, route: '/curriculum' },
+  { key: 'material', label: 'Resources', Icon: FileText, bg: C.materialBg, fg: C.materialFg, route: '/study-material?role=student' },
 ];
 
 const SCHEDULE = [
@@ -307,11 +311,13 @@ export default function HomeScreen() {
     <View style={[s.flex1, { backgroundColor: C.surfaceTinted }]}>
       {/* ── Header ──────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: insets.top + 8 }]}>
-        {/* Avatar (tap → ID Switcher) + Greeting (tap → Student Profile) */}
+        {/* Avatar (tap → Student Profile, long-press → ID Switcher) + Greeting (tap → Student Profile) */}
         <View style={s.headerLeft}>
           <TouchableOpacity
             activeOpacity={0.75}
-            onPress={() => setIsSwitcherOpen(true)}
+            onPress={() => setIsProfileOpen(true)}
+            onLongPress={() => setIsSwitcherOpen(true)}
+            accessibilityLabel="View Student Profile"
           >
             <View style={[s.avatar, { backgroundColor: activeProfile.avatarBg }]}>
               <RNText style={s.avatarInitials}>{activeProfile.initials}</RNText>
@@ -806,11 +812,11 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    rowGap: 14,
+    rowGap: 16,
   },
   quickItem: {
     alignItems: 'center',
-    width: '18%',
+    width: '31%',
   },
   quickIcon: {
     width: 56,

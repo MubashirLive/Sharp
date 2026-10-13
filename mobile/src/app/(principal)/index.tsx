@@ -27,6 +27,7 @@ import {
   FileSpreadsheet,
   BadgeCheck,
 } from 'lucide-react-native';
+import { PrincipalProfileModal } from '@/components/profile/PrincipalProfileModal';
 
 type LeaveRequest = {
   id: string;
@@ -65,6 +66,7 @@ export default function PrincipalHomeScreen() {
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(INITIAL_LEAVE_REQUESTS);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastBody, setBroadcastBody] = useState('');
 
@@ -82,16 +84,21 @@ export default function PrincipalHomeScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* ─── Top Navigation Bar ────────────────────────────────────────── */}
       <View style={styles.headerBar}>
-        <View style={styles.principalInfoRow}>
+        <TouchableOpacity
+          style={styles.principalInfoRow}
+          onPress={() => setIsProfileOpen(true)}
+          activeOpacity={0.7}
+          accessibilityLabel="View Principal Profile"
+        >
           <View style={styles.avatarContainer}>
             <RNText style={styles.avatarText}>RS</RNText>
           </View>
           <View style={styles.principalTextCol}>
             <RNText style={styles.roleBadgeText}>PRINCIPAL DASHBOARD</RNText>
             <RNText style={styles.principalName}>Dr. Rajeshwar Sharma</RNText>
-            <RNText style={styles.schoolName}>St. Xavier High School</RNText>
+            <RNText style={styles.schoolName}>Ideal International School, Indore</RNText>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
           <Bell size={20} color="#000000" />
@@ -323,6 +330,12 @@ export default function PrincipalHomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ─── Principal Profile Full-Screen Modal ─────────────────────── */}
+      <PrincipalProfileModal
+        visible={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
     </View>
   );
 }

@@ -1,380 +1,334 @@
-import React, { useState } from 'react';
+/**
+ * Teacher ChatListScreen — the main chat inbox tab for teachers.
+ *
+ * Features:
+ *  - Search bar
+ *  - Filter chips (All / Unread / Groups / Broadcast / Parents / Teachers / Admin)
+ *  - FlashList of ChatListItem rows (DM, group, broadcast variants)
+ *  - FAB to start a new chat
+ */
+
+import { useCallback, useState } from 'react';
 import {
-  View,
+  Pressable,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
-  Text as RNText,
+  Text,
   TextInput,
+  View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
+import { Pencil, Search } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import {
-  ChevronLeft,
-  Search,
-  MessageCircle,
-  Megaphone,
-  Users,
-  User,
-  Plus,
-  CheckCheck,
-} from 'lucide-react-native';
+import { ChatListItem } from '@/components/chat';
+import type { ChatItemData } from '@/components/chat';
+import { ChatColorsDefault as ChatColors } from '@/constants/chat-theme';
 
-type ChatThread = {
-  id: string;
-  name: string;
-  subtext: string;
-  lastMessage: string;
-  time: string;
-  unreadCount: number;
-  avatarBg: string;
-  initials: string;
-  isGroup?: boolean;
-};
+// ── Filter chips ──────────────────────────────────────────────────────────
 
-const CHATS: ChatThread[] = [
+const FILTERS = ['All', 'Unread', 'Groups', 'Broadcast', 'Parents', 'Teachers', 'Admin'] as const;
+type Filter = (typeof FILTERS)[number];
+
+// ── Mock conversations for Teacher ────────────────────────────────────────
+
+const ALL_CHATS: ChatItemData[] = [
   {
-    id: 'c1',
-    name: 'Grade 10-A Official Parent Group',
-    subtext: '36 Members',
-    lastMessage: 'Mrs. Sharma: Reminder for tomorrow science exhibition submission.',
+    id: 'class-10a',
+    name: 'Grade 10-A — Official Parent Group',
+    subtitle: '36 members · Class Teacher',
+    preview: 'Mrs. Sharma: Reminder for tomorrow science exhibition submission.',
     time: '10:42 AM',
-    unreadCount: 4,
-    avatarBg: '#000000',
+    unread: 4,
     initials: '10A',
-    isGroup: true,
+    avatarColor: '#176b4d',
+    variant: 'group',
   },
   {
-    id: 'c2',
-    name: 'Robert Johnson (Alex\'s Father)',
-    subtext: 'Grade 10-A',
-    lastMessage: 'Thank you maam, I will make sure Alex completes the assignment today.',
-    time: 'Yesterday',
-    unreadCount: 0,
-    avatarBg: '#3B82F6',
+    id: 'robert-johnson',
+    name: 'Robert Johnson',
+    subtitle: 'Parent · Alex Johnson (Grade 10-A)',
+    preview: 'Thank you maam, I will make sure Alex completes the assignment today.',
+    time: '09:15 AM',
     initials: 'RJ',
+    avatarColor: '#214d7a',
+    variant: 'dm',
   },
   {
-    id: 'c3',
-    name: 'Vikram Patel (Aditi\'s Father)',
-    subtext: 'Grade 10-A',
-    lastMessage: 'Can we meet during the parent teacher meeting next Saturday?',
+    id: 'broadcast-announcements',
+    name: 'School Announcements',
+    subtitle: 'Admin · Broadcast',
+    preview: '📢 Staff briefing scheduled for Friday 3:30 PM in Conference Hall.',
     time: 'Yesterday',
-    unreadCount: 1,
-    avatarBg: '#EC4899',
-    initials: 'VP',
+    unread: 1,
+    initials: 'SA',
+    avatarColor: '#39434d',
+    variant: 'broadcast',
   },
   {
-    id: 'c4',
-    name: 'Mathematics Department Staff',
-    subtext: '8 Teachers',
-    lastMessage: 'Mr. Gupta: Mid-term exam question paper draft has been shared.',
-    time: '10 Aug',
-    unreadCount: 0,
-    avatarBg: '#7C3AED',
-    initials: 'MATH',
-    isGroup: true,
+    id: 'vikram-patel',
+    name: 'Vikram Patel',
+    subtitle: 'Parent · Aditi Patel (Grade 10-A)',
+    preview: 'Can we meet during the parent teacher meeting next Saturday?',
+    time: 'Yesterday',
+    unread: 1,
+    initials: 'VP',
+    avatarColor: '#7a4a2d',
+    variant: 'dm',
+  },
+  {
+    id: 'maths-dept',
+    name: 'Mathematics & Commerce Dept',
+    subtitle: '8 members · Faculty',
+    preview: 'Mr. Gupta: Mid-term exam question paper draft has been shared.',
+    time: 'Mon',
+    initials: 'MC',
+    avatarColor: '#214d7a',
+    variant: 'group',
+  },
+  {
+    id: 'principal',
+    name: 'Principal Office',
+    subtitle: 'Admin',
+    preview: 'Please submit the grade 10 term attendance report by tomorrow.',
+    time: 'Mon',
+    unread: 2,
+    initials: 'PO',
+    avatarColor: '#39434d',
+    variant: 'dm',
+  },
+  {
+    id: 'dr-kumar',
+    name: 'Dr. Kumar',
+    subtitle: 'PGT Economics · Faculty',
+    preview: 'Are we still meeting for the curriculum assessment planning?',
+    time: '11/04',
+    initials: 'DK',
+    avatarColor: '#7b5b1e',
+    variant: 'dm',
+  },
+  {
+    id: 'ms-higgins',
+    name: 'Ms. Higgins',
+    subtitle: 'Librarian · Staff',
+    preview: 'The new reference books for Class 10 & 11 have arrived.',
+    time: '11/02',
+    initials: 'MH',
+    avatarColor: '#5f4b8b',
+    variant: 'dm',
   },
 ];
 
+// ── Filter logic ──────────────────────────────────────────────────────────
+
+function applyFilter(chats: ChatItemData[], filter: Filter, query: string): ChatItemData[] {
+  let result = chats;
+
+  if (filter === 'Unread') result = result.filter((c) => (c.unread ?? 0) > 0);
+  else if (filter === 'Groups') result = result.filter((c) => c.variant === 'group');
+  else if (filter === 'Broadcast') result = result.filter((c) => c.variant === 'broadcast');
+  else if (filter === 'Parents') result = result.filter((c) => c.subtitle?.toLowerCase().includes('parent'));
+  else if (filter === 'Teachers') result = result.filter((c) => c.subtitle?.toLowerCase().includes('faculty') || c.subtitle?.toLowerCase().includes('staff') || c.subtitle?.toLowerCase().includes('teacher'));
+  else if (filter === 'Admin') result = result.filter((c) => c.subtitle?.toLowerCase().includes('admin'));
+
+  if (query.trim()) {
+    const q = query.toLowerCase();
+    result = result.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.preview.toLowerCase().includes(q) ||
+        c.subtitle.toLowerCase().includes(q)
+    );
+  }
+
+  return result;
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────
+
 export default function TeacherChatScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-
-  const [activeTab, setActiveTab] = useState<'all' | 'parents' | 'groups'>('all');
+  const [activeFilter, setActiveFilter] = useState<Filter>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredChats = CHATS.filter((c) => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (activeTab === 'parents') return matchesSearch && !c.isGroup;
-    if (activeTab === 'groups') return matchesSearch && c.isGroup;
-    return matchesSearch;
-  });
+  const filtered = applyFilter(ALL_CHATS, activeFilter, searchQuery);
+
+  const handleOpen = useCallback(
+    (item: ChatItemData) => {
+      if (item.variant === 'group') {
+        router.push(`/group-chat?id=${item.id}`);
+      } else if (item.variant === 'broadcast') {
+        router.push(`/broadcast-channel?id=${item.id}`);
+      } else {
+        router.push(`/chat-detail?id=${item.id}`);
+      }
+    },
+    [router]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: ChatItemData }) => (
+      <ChatListItem {...item} onPress={() => handleOpen(item)} />
+    ),
+    [handleOpen]
+  );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* ─── Header Bar ────────────────────────────────────────────── */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <ChevronLeft size={24} color="#000000" />
-        </TouchableOpacity>
-        <RNText style={styles.headerTitle}>Teacher Messages</RNText>
-        <TouchableOpacity style={styles.newChatBtn} activeOpacity={0.8}>
-          <Plus size={20} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* ─── Search & Category Tabs ─────────────────────────────────── */}
-      <View style={styles.searchSection}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      {/* ── Top bar ── */}
+      <View style={styles.topBar}>
+        <Text style={styles.title}>Chats</Text>
         <View style={styles.searchBox}>
-          <Search size={16} color="rgba(60,60,67,0.5)" />
+          <Search size={18} color={ChatColors.iconMuted} strokeWidth={2.2} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search messages or parents..."
-            placeholderTextColor="rgba(60,60,67,0.4)"
+            placeholder="Search conversations"
+            placeholderTextColor={ChatColors.iconMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
-
-        <View style={styles.tabsRow}>
-          {(['all', 'parents', 'groups'] as const).map((tab) => {
-            const isSel = tab === activeTab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.tabBtn, isSel && styles.tabBtnActive]}
-                onPress={() => setActiveTab(tab)}
-                activeOpacity={0.8}
-              >
-                <RNText style={[styles.tabBtnText, isSel && styles.tabBtnTextActive]}>
-                  {tab === 'all' ? 'All Chats' : tab === 'parents' ? 'Parents' : 'Class Groups'}
-                </RNText>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
       </View>
 
-      {/* ─── Broadcast Banner ────────────────────────────────────────── */}
-      <TouchableOpacity
-        style={styles.broadcastBanner}
-        activeOpacity={0.8}
-        onPress={() => router.push('/(teacher)')}
-      >
-        <View style={styles.broadcastIconBox}>
-          <Megaphone size={18} color="#ffffff" />
-        </View>
-        <View style={styles.broadcastTextCol}>
-          <RNText style={styles.broadcastTitle}>Send Class Broadcast</RNText>
-          <RNText style={styles.broadcastSub}>Message all 36 Grade 10-A parents at once</RNText>
-        </View>
-      </TouchableOpacity>
-
-      {/* ─── Chat Threads List ───────────────────────────────────────── */}
       <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.chatsScrollContent}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScrollView}
+        contentContainerStyle={styles.filterRow}
       >
-        {filteredChats.map((chat) => (
-          <TouchableOpacity
-            key={chat.id}
-            style={styles.chatCard}
-            activeOpacity={0.7}
-            onPress={() => router.push('/chat-detail')}
-          >
-            <View style={[styles.avatarBox, { backgroundColor: chat.avatarBg }]}>
-              <RNText style={styles.avatarTxt}>{chat.initials}</RNText>
-            </View>
-
-            <View style={styles.chatMetaCol}>
-              <View style={styles.chatHeaderRow}>
-                <RNText style={styles.chatName} numberOfLines={1}>
-                  {chat.name}
-                </RNText>
-                <RNText style={styles.chatTime}>{chat.time}</RNText>
-              </View>
-
-              <RNText style={styles.chatSubtext}>{chat.subtext}</RNText>
-              <RNText style={styles.lastMessage} numberOfLines={1}>
-                {chat.lastMessage}
-              </RNText>
-            </View>
-
-            {chat.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <RNText style={styles.unreadText}>{chat.unreadCount}</RNText>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-
-        <View style={{ height: 40 }} />
+        {FILTERS.map((filter) => {
+          const active = filter === activeFilter;
+          return (
+            <Pressable
+              key={filter}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => setActiveFilter(filter)}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {filter}
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
-    </View>
+
+      {/* ── Conversation list ── */}
+      {filtered.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>No conversations found.</Text>
+        </View>
+      ) : (
+        <FlashList
+          data={filtered}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          estimatedItemSize={82}
+          showsVerticalScrollIndicator={false}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
+
+      {/* ── New chat FAB ── */}
+      <Pressable style={styles.fab}>
+        <Pencil size={22} color={ChatColors.bg} strokeWidth={2.4} />
+      </Pressable>
+    </SafeAreaView>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#FAFAFC',
+    backgroundColor: ChatColors.bg,
   },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F3',
+  topBar: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#000000',
-  },
-  newChatBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchSection: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F3',
+  title: {
+    color: ChatColors.textSecondary,
+    fontSize: 28,
+    fontWeight: '900',
+    marginBottom: 12,
+    letterSpacing: -0.3,
   },
   searchBox: {
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: ChatColors.bgElevated,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F4F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
-    color: '#000000',
-  },
-  tabsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  tabBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: '#F4F4F6',
-  },
-  tabBtnActive: {
-    backgroundColor: '#000000',
-  },
-  tabBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  tabBtnTextActive: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  broadcastBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#000000',
-    marginHorizontal: 20,
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 16,
-  },
-  broadcastIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  broadcastTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  broadcastTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  broadcastSub: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.75)',
-  },
-  chatsScrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    gap: 8,
-  },
-  chatCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#ffffff',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#F0F0F3',
-  },
-  avatarBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarTxt: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  chatMetaCol: {
-    flex: 1,
-    gap: 2,
-  },
-  chatHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  chatName: {
+    color: ChatColors.textPrimary,
     fontSize: 15,
-    fontWeight: '700',
-    color: '#000000',
+    paddingVertical: 0,
+  },
+  filterScrollView: {
+    flexGrow: 0,
+  },
+  list: {
     flex: 1,
   },
-  chatTime: {
-    fontSize: 11,
-    color: 'rgba(60,60,67,0.5)',
+  filterRow: {
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 4,
   },
-  chatSubtext: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1B8CC4',
+  chip: {
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: ChatColors.inputBorder,
+    justifyContent: 'center',
+    paddingHorizontal: 15,
   },
-  lastMessage: {
+  chipActive: {
+    backgroundColor: '#1e3a34',
+    borderColor: ChatColors.accent,
+  },
+  chipText: {
+    color: ChatColors.textMuted,
     fontSize: 13,
-    color: 'rgba(60,60,67,0.65)',
+    fontWeight: '700',
   },
-  unreadBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FF3B30',
+  chipTextActive: {
+    color: ChatColors.accent,
+  },
+  listContent: {
+    paddingTop: 4,
+    paddingBottom: 100,
+  },
+  empty: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  unreadText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
+  emptyText: {
+    color: ChatColors.textMuted,
+    fontSize: 15,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: ChatColors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

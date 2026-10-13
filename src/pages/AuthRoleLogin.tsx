@@ -33,21 +33,18 @@ const ROLE_CONFIG = {
   principal: {
     title: "Principal Login",
     icon: School,
-    brandingLabel: "SHARP",
     subtitle: "Sign in to your school dashboard",
     authMethod: "password" as const,
   },
   staff: {
     title: "Staff Login",
     icon: BriefcaseBusiness,
-    brandingLabel: "SHARP",
     subtitle: "Sign in to your account",
     authMethod: "pin" as const,
   },
   student: {
     title: "Student Login",
     icon: GraduationCap,
-    brandingLabel: "SHARP",
     subtitle: "Sign in to your account",
     authMethod: "pin" as const,
   },
@@ -179,10 +176,24 @@ export default function AuthRoleLogin({ kind }: { kind: LoginKind }) {
           {/* White-label school header */}
           <div className="flex flex-col items-center mb-7">
             {schoolLogo ? (
-              <img src={schoolLogo} alt={schoolName ?? ""} loading="lazy" decoding="async" className="login-branding-icon mb-4 object-cover" />
+              <div className="w-16 h-16 rounded-full bg-white p-1.5 ring-1 ring-slate-200/90 shadow-md shadow-indigo-950/5 flex items-center justify-center overflow-hidden mb-4">
+                <img
+                  src={schoolLogo}
+                  alt={schoolName ?? "School Logo"}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-contain rounded-full mix-blend-multiply select-none"
+                />
+              </div>
             ) : (
-              <div className="login-branding-icon mb-4">
-                <Building2 className="h-8 w-8 text-white" />
+              <div className="w-16 h-16 rounded-full bg-white p-1.5 ring-1 ring-slate-200/90 shadow-md shadow-indigo-950/5 flex items-center justify-center overflow-hidden mb-4">
+                <img
+                  src="/ideal-logo.jpg"
+                  alt={schoolName ?? "School Logo"}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-contain rounded-full mix-blend-multiply select-none"
+                />
               </div>
             )}
             <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-[hsl(var(--login-text-muted))]">
@@ -221,10 +232,6 @@ export default function AuthRoleLogin({ kind }: { kind: LoginKind }) {
               Change school
             </button>
           </div>
-
-          <p className="text-center text-xs text-[hsl(var(--login-text-muted))] mt-5">
-            Powered by <span className="font-semibold text-[hsl(var(--login-primary))]">SHARP</span>
-          </p>
         </div>
       </div>
     );
@@ -233,8 +240,7 @@ export default function AuthRoleLogin({ kind }: { kind: LoginKind }) {
   // ── Password-based login (Principal) ──────────────────────────────────────────
   return (
     <LoginCard
-      brandingIcon={<Icon className="h-8 w-8" />}
-      brandingLabel={config.brandingLabel}
+      logoSrc={schoolLogo || "/ideal-logo.jpg"}
       title={config.title}
       subtitle={config.subtitle}
       footer="Contact your Super Admin if you do not have credentials."
