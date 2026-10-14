@@ -660,20 +660,20 @@ export default function PrincipalLoginPage({
                       <span>Time Table 2</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Multi-view canvas sandbox for testing period grid paradigms, timeline views, and faculty allocators.
+                      Recessed grid matrix sandbox for testing period grid paradigms, inline durations, and section status.
                     </p>
                   </div>
 
                   {/* Feature Badges */}
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Multi-View Canvas
+                      Recessed Grid
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Bell Timeline
+                      Scale Timings
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Faculty Allocator
+                      Class Status
                     </span>
                   </div>
                 </div>

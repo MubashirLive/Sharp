@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   Layers,
   LayoutGrid,
-  Users,
   Search,
   Filter,
   Eye,
@@ -559,7 +558,6 @@ export default function Timetable3Page({
   const [selectedTimetableId, setSelectedTimetableId] = useState("tt3-1");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"grid" | "timeline" | "allocator">("grid");
   const [visualTreatment, setVisualTreatment] = useState<VisualTreatment>("full-tint");
   const [highlightedSubject, setHighlightedSubject] = useState<string | null>(null);
 
@@ -750,52 +748,11 @@ export default function Timetable3Page({
               )}
             </div>
           </div>
-
-          {/* Prototype View Mode Toggles */}
-          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => setActiveView("grid")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                activeView === "grid"
-                  ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Grid Canvas</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveView("timeline")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                activeView === "timeline"
-                  ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Bell Timeline</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveView("allocator")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                activeView === "allocator"
-                  ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Faculty Allocator</span>
-            </button>
-          </div>
         </div>
 
         {/* ── TIMETABLE 3 CONTAINER ── */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex-1 flex flex-col overflow-hidden">
-          {activeView === "grid" && (
-            <div className="flex-1 p-2.5 sm:p-3 flex flex-col min-w-0">
+          <div className="flex-1 p-2.5 sm:p-3 flex flex-col min-w-0">
               {/* Header Info */}
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
                 {/* Left: Class Section & Flat Borderless Status Ticker (Notion Editorial Style) */}
@@ -1151,35 +1108,6 @@ export default function Timetable3Page({
                 </div>
               </div>
             </div>
-          )}
-
-          {activeView === "timeline" && (
-            <div className="flex-1 p-6 flex flex-col items-center justify-center text-center">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3">
-                <Clock className="w-7 h-7" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Bell Schedule Timeline Studio
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1">
-                Visual interactive timeline view for experimenting with period durations, bell rings, lunch intervals, and transitions.
-              </p>
-            </div>
-          )}
-
-          {activeView === "allocator" && (
-            <div className="flex-1 p-6 flex flex-col items-center justify-center text-center">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3">
-                <Users className="w-7 h-7" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Faculty Subject Allocator Studio
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1">
-                Drag-and-drop subject palette for assigning educators and detecting consecutive period load clashes.
-              </p>
-            </div>
-          )}
         </div>
       </main>
 
