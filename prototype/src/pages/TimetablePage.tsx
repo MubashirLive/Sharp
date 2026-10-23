@@ -759,7 +759,7 @@ export default function TimetablePage({
                       {/* Boundary 0: Start time on Line 0 (Google Calendar scale marker) */}
                       {idx === 0 && (
                         <div
-                          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 bg-white dark:bg-slate-900 text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap rounded select-none pointer-events-none border border-slate-200/80 dark:border-slate-800 shadow-2xs"
+                          className="absolute left-1.5 top-1/2 -translate-y-1/2 z-20 px-1.5 py-0.5 bg-white dark:bg-slate-900 text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap rounded select-none pointer-events-none border border-slate-200/80 dark:border-slate-800 shadow-2xs"
                         >
                           {formatCalendarLineTime(periods[0].startTime)}
                         </div>

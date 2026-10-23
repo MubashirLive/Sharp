@@ -25,6 +25,9 @@ import {
   PlusCircle,
   RotateCcw,
   CheckCircle2,
+  UserCheck,
+  User,
+  Save,
 } from "lucide-react";
 import ThemeToggle from "../components/ThemeToggle";
 
@@ -717,6 +720,131 @@ export function getClassVisualMeta(ttItem: { id: string; name: string; wing: str
   };
 }
 
+// ── Teacher Profiles & Faculty Directory ──
+export interface TeacherProfile {
+  id: string;
+  name: string;
+  primarySubject: string;
+  department: string;
+  classTeacherOf?: string;
+  avatarColor: string;
+  initials: string;
+}
+
+export const TEACHERS_LIST: TeacherProfile[] = [
+  { id: "t-manish", name: "Manish Kumar", primarySubject: "English", department: "Languages & Humanities", classTeacherOf: "Class 10 - Section A", avatarColor: "bg-blue-600", initials: "MK" },
+  { id: "t-ramanujan", name: "Dr. R. Ramanujan", primarySubject: "Mathematics", department: "Mathematics & Computing", classTeacherOf: "Class 12 - Section A", avatarColor: "bg-indigo-600", initials: "RR" },
+  { id: "t-bhabha", name: "Dr. Homi Bhabha", primarySubject: "Science", department: "Natural Sciences", classTeacherOf: "Class 9 - Section A", avatarColor: "bg-emerald-600", initials: "HB" },
+  { id: "t-raman", name: "Dr. C. V. Raman", primarySubject: "Physics", department: "Natural Sciences", classTeacherOf: "Class 11 - Section A", avatarColor: "bg-sky-600", initials: "CR" },
+  { id: "t-kalam", name: "Dr. A. P. J. Kalam", primarySubject: "Chemistry", department: "Natural Sciences", avatarColor: "bg-teal-600", initials: "AK" },
+  { id: "t-salim", name: "Dr. Salim Ali", primarySubject: "Biology", department: "Life Sciences", avatarColor: "bg-emerald-600", initials: "SA" },
+  { id: "t-sunita", name: "Sunita Verma", primarySubject: "Social Studies", department: "Social Sciences", classTeacherOf: "Class 8 - Section A", avatarColor: "bg-purple-600", initials: "SV" },
+  { id: "t-romila", name: "Mrs. Romila Thapar", primarySubject: "History", department: "Social Sciences", avatarColor: "bg-rose-600", initials: "RT" },
+  { id: "t-amartya", name: "Dr. Amartya Sen", primarySubject: "Economics", department: "Commerce & Economics", classTeacherOf: "Class 12 - Section B", avatarColor: "bg-amber-600", initials: "AS" },
+  { id: "t-jhunjhunwala", name: "Mr. R. Jhunjhunwala", primarySubject: "Accountancy", department: "Commerce & Economics", classTeacherOf: "Class 11 - Section B", avatarColor: "bg-cyan-600", initials: "RJ" },
+  { id: "t-kiran", name: "Mrs. Kiran M. Shaw", primarySubject: "Business Studies", department: "Commerce & Economics", avatarColor: "bg-violet-600", initials: "KS" },
+  { id: "t-rajesh", name: "Rajesh Tiwari", primarySubject: "Hindi", department: "Languages & Humanities", classTeacherOf: "Class 7 - Section A", avatarColor: "bg-amber-600", initials: "RT" },
+  { id: "t-satya", name: "Satya N.", primarySubject: "Computer", department: "Computer Science", avatarColor: "bg-cyan-600", initials: "SN" },
+  { id: "t-meera", name: "Mrs. Meera Kapoor", primarySubject: "EVS", department: "Primary Education", classTeacherOf: "Class 4 - Section A", avatarColor: "bg-emerald-600", initials: "MK" },
+  { id: "t-ananya", name: "Mrs. Ananya Sen", primarySubject: "Rhymes & Play", department: "Early Childhood", classTeacherOf: "Nursery - Section A", avatarColor: "bg-pink-600", initials: "AS" },
+  { id: "t-dhyan", name: "Major Dhyan", primarySubject: "Sports", department: "Physical Education", avatarColor: "bg-orange-600", initials: "MD" },
+  { id: "t-amrita", name: "Amrita Sher-Gil", primarySubject: "Arts", department: "Creative Arts", avatarColor: "bg-pink-600", initials: "AS" },
+  { id: "t-ravi", name: "Pt. Ravi Shankar", primarySubject: "Music", department: "Performing Arts", avatarColor: "bg-violet-600", initials: "RS" },
+  { id: "t-pooja", name: "Pooja Roy", primarySubject: "Library", department: "Library & Research", avatarColor: "bg-slate-600", initials: "PR" },
+  { id: "t-pillai", name: "K. S. Pillai", primarySubject: "Moral Science", department: "Value Education", avatarColor: "bg-teal-600", initials: "KP" },
+];
+
+export interface TeacherSlotAssignment {
+  classId: string;
+  className: string;
+  shortCode: string;
+  wing: string;
+  sectionLetter: string;
+  subject: string;
+  sectionPillClass: string;
+  isConflict?: boolean;
+  conflictClasses?: string[];
+}
+
+// Dynamically inverts class schedules into a complete teacher timetable
+export function computeTeacherWeekSchedule(
+  teacherName: string,
+  classSchedules: Record<string, Record<string, { subject: string; teacher: string }[]>>,
+  classList: typeof MOCK_TIMETABLES_V2
+): {
+  schedule: Record<string, (TeacherSlotAssignment | "Free" | "Break")[]>;
+  assignedCount: number;
+  freeCount: number;
+  totalAcademicSlots: number;
+  classesTaught: string[];
+} {
+  const schedule: Record<string, (TeacherSlotAssignment | "Free" | "Break")[]> = {};
+  let assignedCount = 0;
+  let freeCount = 0;
+  let totalAcademicSlots = 0;
+  const classesSet = new Set<string>();
+
+  const classMetaMap = new Map<string, { cls: (typeof classList)[0]; meta: ReturnType<typeof getClassVisualMeta> }>();
+  classList.forEach((cls) => {
+    classMetaMap.set(cls.id, { cls, meta: getClassVisualMeta(cls) });
+  });
+
+  DAYS.forEach((day) => {
+    const dayAssignments: (TeacherSlotAssignment | "Free" | "Break")[] = [];
+    for (let slotIdx = 0; slotIdx < 8; slotIdx++) {
+      const matchingClasses: TeacherSlotAssignment[] = [];
+
+      for (const cls of classList) {
+        const slotData = classSchedules[cls.id]?.[day]?.[slotIdx];
+        if (slotData && slotData.teacher && slotData.teacher.toLowerCase() === teacherName.toLowerCase()) {
+          const item = classMetaMap.get(cls.id);
+          matchingClasses.push({
+            classId: cls.id,
+            className: cls.name,
+            shortCode: item?.meta.shortCode || cls.version,
+            wing: cls.wing,
+            sectionLetter: item?.meta.sectionLetter || "A",
+            subject: slotData.subject,
+            sectionPillClass: item?.meta.sectionPillClass || "bg-indigo-600 text-white",
+          });
+          classesSet.add(item?.meta.shortCode || cls.version);
+        }
+      }
+
+      // Slot 4 is standard Lunch Break / Recess
+      if (slotIdx === 4) {
+        dayAssignments.push("Break");
+      } else if (matchingClasses.length === 1) {
+        dayAssignments.push(matchingClasses[0]);
+        assignedCount++;
+        totalAcademicSlots++;
+      } else if (matchingClasses.length > 1) {
+        // Teacher double-booked conflict
+        dayAssignments.push({
+          ...matchingClasses[0],
+          isConflict: true,
+          conflictClasses: matchingClasses.map((m) => m.shortCode),
+        });
+        assignedCount++;
+        totalAcademicSlots++;
+      } else {
+        dayAssignments.push("Free");
+        freeCount++;
+        totalAcademicSlots++;
+      }
+    }
+    schedule[day] = dayAssignments;
+  });
+
+  return {
+    schedule,
+    assignedCount,
+    freeCount,
+    totalAcademicSlots,
+    classesTaught: Array.from(classesSet),
+  };
+}
+
 const ZOOM_LEVELS = [70, 85, 100, 115, 130] as const;
 const MIN_ZOOM = 70;
 const MAX_ZOOM = 130;
@@ -829,6 +957,27 @@ export default function Timetable2Page({
   const [selectedTimetableId, setSelectedTimetableId] = useState<string>("tt-main");
   const [isTimetableDropdownOpen, setIsTimetableDropdownOpen] = useState(false);
 
+  // Perspective Switcher: "classwise" | "teacherwise" | "free-teachers"
+  const [perspective, setPerspective] = useState<"classwise" | "teacherwise" | "free-teachers">("classwise");
+  const [isPerspectiveDropdownOpen, setIsPerspectiveDropdownOpen] = useState(false);
+
+  // Edit Mode state (available exclusively in Class-wise mode)
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [savedClassSchedules, setSavedClassSchedules] = useState<
+    Record<string, Record<string, { subject: string; teacher: string }[]>>
+  >(CLASS_SCHEDULES);
+  const [savedBellSchedules, setSavedBellSchedules] = useState<
+    Record<string, BellSchedule>
+  >(INITIAL_BELL_SCHEDULES);
+  const [savedDayScheduleMap, setSavedDayScheduleMap] = useState<
+    Record<string, string>
+  >(INITIAL_DAY_SCHEDULE_MAP);
+  const [saveSuccessToast, setSaveSuccessToast] = useState<string | null>(null);
+
+  // Free Teachers View Filter State (Day & Period)
+  const [freeTeacherDay, setFreeTeacherDay] = useState<string>("Mon");
+  const [freeTeacherSlot, setFreeTeacherSlot] = useState<number>(0);
+
   const [selectedWing, setSelectedWing] = useState<string>("all");
   const [isWingDropdownOpen, setIsWingDropdownOpen] = useState(false);
 
@@ -848,6 +997,14 @@ export default function Timetable2Page({
   const [classSchedules, setClassSchedules] = useState<
     Record<string, Record<string, { subject: string; teacher: string }[]>>
   >(CLASS_SCHEDULES);
+
+  // Computes whether live schedules, bell timing, or day layouts differ from the pre-edit snapshot
+  const hasUnsavedChanges = useMemo(() => {
+    const schedDiff = JSON.stringify(classSchedules) !== JSON.stringify(savedClassSchedules);
+    const bellDiff = JSON.stringify(bellSchedules) !== JSON.stringify(savedBellSchedules);
+    const dayMapDiff = JSON.stringify(dayScheduleMap) !== JSON.stringify(savedDayScheduleMap);
+    return schedDiff || bellDiff || dayMapDiff;
+  }, [classSchedules, savedClassSchedules, bellSchedules, savedBellSchedules, dayScheduleMap, savedDayScheduleMap]);
 
   // Interactive CRUD Dialog States
   const [boundaryEdit, setBoundaryEdit] = useState<{
@@ -903,8 +1060,67 @@ export default function Timetable2Page({
   const selectedMasterTimetable =
     MASTER_TIMETABLES.find((tt) => tt.id === selectedTimetableId) || MASTER_TIMETABLES[0];
 
+  // Set of wing names each teacher teaches in based on live classSchedules
+  // (A teacher is mapped to a wing if they have at least one period assigned in any class of that wing)
+  const teacherWingsMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    // Initialize for all known teachers
+    TEACHERS_LIST.forEach((t) => {
+      map.set(t.name.toLowerCase(), new Set<string>());
+    });
+
+    MOCK_CLASSES_LIST.forEach((cls) => {
+      const sched = classSchedules[cls.id];
+      if (!sched) return;
+      Object.values(sched).forEach((daySlots) => {
+        daySlots.forEach((slot) => {
+          if (
+            slot &&
+            slot.teacher &&
+            slot.teacher !== "Unassigned" &&
+            slot.teacher !== "Free" &&
+            slot.teacher.trim() !== ""
+          ) {
+            const tKey = slot.teacher.toLowerCase();
+            if (!map.has(tKey)) {
+              map.set(tKey, new Set<string>());
+            }
+            map.get(tKey)!.add(cls.wing);
+          }
+        });
+      });
+    });
+
+    return map;
+  }, [classSchedules]);
+
+  // Dynamic wing options that compute correct counts for classwise (classes) vs teacherwise (faculty)
+  const currentWingOptions = useMemo(() => {
+    if (perspective === "teacherwise") {
+      return WING_OPTIONS.map((w) => {
+        if (w.id === "all") {
+          return {
+            ...w,
+            count: TEACHERS_LIST.length,
+            description: `All Faculty (${TEACHERS_LIST.length} Teachers)`,
+          };
+        }
+        const teacherCount = TEACHERS_LIST.filter((t) => {
+          const wings = teacherWingsMap.get(t.name.toLowerCase());
+          return wings && wings.has(w.id);
+        }).length;
+        return {
+          ...w,
+          count: teacherCount,
+          description: `${teacherCount} Teachers with periods in ${w.label}`,
+        };
+      });
+    }
+    return WING_OPTIONS;
+  }, [perspective, teacherWingsMap]);
+
   const selectedWingOption =
-    WING_OPTIONS.find((w) => w.id === selectedWing) || WING_OPTIONS[0];
+    currentWingOptions.find((w) => w.id === selectedWing) || currentWingOptions[0];
 
   const selectedTimetable = selectedMasterTimetable;
 
@@ -1026,6 +1242,97 @@ export default function Timetable2Page({
     });
   }, [selectedWing, activeFilterQuery, classSchedules]);
 
+  // Comma-separated search token breakdown for multi-token pinned stacking
+  const searchTokens = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return searchQuery
+      .split(",")
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+  }, [searchQuery]);
+
+  // Teachers matched by any search token (for Class-wise and Teacher-wise pinned top)
+  const matchedTeachersFromSearch = useMemo(() => {
+    if (searchTokens.length === 0) return [];
+    return TEACHERS_LIST.filter((teacher) => {
+      if (selectedWing !== "all") {
+        const wings = teacherWingsMap.get(teacher.name.toLowerCase());
+        if (!wings || !wings.has(selectedWing)) return false;
+      }
+      return searchTokens.some((token) => {
+        const nameMatch = teacher.name.toLowerCase().includes(token);
+        const subjMatch = teacher.primarySubject.toLowerCase().includes(token);
+        const deptMatch = teacher.department.toLowerCase().includes(token);
+        return nameMatch || subjMatch || deptMatch;
+      });
+    });
+  }, [searchTokens, selectedWing, teacherWingsMap]);
+
+  // Classes matched by any search token (for Class-wise pinned stacking)
+  const matchedClassesFromSearch = useMemo(() => {
+    if (searchTokens.length === 0) return [];
+    return MOCK_CLASSES_LIST.filter((cls) => {
+      if (selectedWing !== "all" && cls.wing !== selectedWing) return false;
+      return searchTokens.some((token) => {
+        const nameMatch = cls.name.toLowerCase().includes(token);
+        const verMatch = cls.version.toLowerCase().includes(token);
+        const wingMatch = cls.wing.toLowerCase().includes(token);
+        const idMatch = cls.id.toLowerCase().includes(token);
+        const cleanToken = token.replace(/[^a-z0-9]/g, "");
+        const cleanName = cls.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const cleanVer = cls.version.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return (
+          nameMatch ||
+          verMatch ||
+          wingMatch ||
+          idMatch ||
+          (cleanToken.length > 0 && (cleanName.includes(cleanToken) || cleanVer.includes(cleanToken)))
+        );
+      });
+    });
+  }, [searchTokens, selectedWing]);
+
+  // Remaining classes in chronological order (excluding pinned matches)
+  const remainingClassesToRender = useMemo(() => {
+    const matchedClassIds = new Set(matchedClassesFromSearch.map((c) => c.id));
+    return MOCK_CLASSES_LIST.filter((cls) => {
+      if (selectedWing !== "all" && cls.wing !== selectedWing) return false;
+      if (searchTokens.length > 0 && matchedClassIds.has(cls.id)) return false;
+      return true;
+    });
+  }, [selectedWing, matchedClassesFromSearch, searchTokens]);
+
+  // Teacher-wise partitioned lists (pinned vs remaining)
+  // Even if a teacher has one single period in the selected wing, they are included!
+  const teacherWiseData = useMemo(() => {
+    const wingFilteredTeachers = TEACHERS_LIST.filter((teacher) => {
+      if (selectedWing === "all") return true;
+      const wings = teacherWingsMap.get(teacher.name.toLowerCase());
+      return wings && wings.has(selectedWing);
+    });
+
+    if (searchTokens.length === 0) {
+      return { pinned: [], remaining: wingFilteredTeachers };
+    }
+    const pinned: TeacherProfile[] = [];
+    const remaining: TeacherProfile[] = [];
+    wingFilteredTeachers.forEach((teacher) => {
+      const isMatch = searchTokens.some((token) => {
+        return (
+          teacher.name.toLowerCase().includes(token) ||
+          teacher.primarySubject.toLowerCase().includes(token) ||
+          teacher.department.toLowerCase().includes(token)
+        );
+      });
+      if (isMatch) {
+        pinned.push(teacher);
+      } else {
+        remaining.push(teacher);
+      }
+    });
+    return { pinned, remaining };
+  }, [searchTokens, selectedWing, teacherWingsMap]);
+
   const handleJumpToClass = (classId: string, wing: string) => {
     if (selectedWing !== "all" && selectedWing !== wing) {
       setSelectedWing("all");
@@ -1076,6 +1383,7 @@ export default function Timetable2Page({
     newTimeStr: string,
     isBoundary: boolean
   ) => {
+    if (!isEditMode) return;
     setBellSchedules((prev) => {
       const schedule = prev[scheduleId];
       if (!schedule) return prev;
@@ -1128,6 +1436,7 @@ export default function Timetable2Page({
     title: string,
     duration: number
   ) => {
+    if (!isEditMode) return;
     setBellSchedules((prev) => {
       const schedule = prev[scheduleId];
       if (!schedule) return prev;
@@ -1220,6 +1529,7 @@ export default function Timetable2Page({
 
   // ── 3. Delete Period Handler ──
   const handleDeletePeriod = (scheduleId: string, periodIdx: number) => {
+    if (!isEditMode) return;
     setBellSchedules((prev) => {
       const schedule = prev[scheduleId];
       if (!schedule || schedule.periods.length <= 1) return prev;
@@ -1272,6 +1582,7 @@ export default function Timetable2Page({
 
   // ── 4. Day Bell Schedule Customization Handlers ──
   const handleMakeDayUnique = (day: string) => {
+    if (!isEditMode) return;
     const currentScheduleId = dayScheduleMap[day] || "standard";
     const baseSchedule = bellSchedules[currentScheduleId] || bellSchedules["standard"];
     const newScheduleId = `${day.toLowerCase()}-custom-${Date.now()}`;
@@ -1297,6 +1608,7 @@ export default function Timetable2Page({
   };
 
   const handleRevertDayToStandard = (day: string) => {
+    if (!isEditMode) return;
     setDayScheduleMap((prev) => ({
       ...prev,
       [day]: "standard",
@@ -1312,6 +1624,7 @@ export default function Timetable2Page({
     subjectName: string,
     teacherName: string
   ) => {
+    if (!isEditMode) return;
     setClassSchedules((prev) => {
       const classData = { ...(prev[classId] || {}) };
       const daySlots = [...(classData[day] || [])];
@@ -1323,6 +1636,7 @@ export default function Timetable2Page({
   };
 
   const handleClearCell = (classId: string, day: string, slotIdx: number) => {
+    if (!isEditMode) return;
     setClassSchedules((prev) => {
       const classData = { ...(prev[classId] || {}) };
       const daySlots = [...(classData[day] || [])];
@@ -1431,20 +1745,18 @@ export default function Timetable2Page({
 
     return (
       <div
-        className={`grid items-stretch border-b-2 sticky top-0 z-20 ${
-          isCustomOrSat
+        className={`grid items-stretch border-b-2 sticky top-0 z-20 ${isCustomOrSat
             ? "border-amber-400 dark:border-amber-700 bg-amber-100 dark:bg-amber-950"
             : "border-slate-400/90 dark:border-slate-600 bg-slate-100 dark:bg-slate-800"
-        }`}
+          }`}
         style={{ gridTemplateColumns: template }}
       >
         {/* Left Corner Cell: Day Group Range + Class Code Stamp + Append Period */}
         <div
-          className={`${zm.timingH} sticky left-0 z-30 border-r-2 select-none flex items-center justify-between px-1 gap-1 ${
-            isCustomOrSat
+          className={`${zm.timingH} sticky left-0 z-30 border-r-2 select-none flex items-center justify-between px-1 gap-1 ${isCustomOrSat
               ? "bg-amber-200 dark:bg-amber-900 border-amber-400 dark:border-amber-700 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)] text-amber-900 dark:text-amber-100"
               : "bg-slate-200 dark:bg-slate-700 border-slate-400/90 dark:border-slate-600 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)] text-slate-800 dark:text-slate-100"
-          }`}
+            }`}
           title={`${visualMeta ? `${visualMeta.gradeName} - ${visualMeta.rawSec} | ` : ""}${schedule.name} applies to: ${groupDays.join(", ")}`}
         >
           <div className="flex items-center gap-0.5 min-w-0 overflow-hidden">
@@ -1459,22 +1771,24 @@ export default function Timetable2Page({
               {groupDays.length === 1 ? groupDays[0] : `${groupDays[0]}–${groupDays[groupDays.length - 1]}`}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setInsertPeriodState({
-                scheduleId: schedule.id,
-                insertAfterIdx: schedule.periods.length - 1,
-                type: "regular",
-                title: "",
-                duration: 40,
-              });
-            }}
-            className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
-            title="Append a new period to this schedule"
-          >
-            <Plus className="w-2.5 h-2.5" />
-          </button>
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={() => {
+                setInsertPeriodState({
+                  scheduleId: schedule.id,
+                  insertAfterIdx: schedule.periods.length - 1,
+                  type: "regular",
+                  title: "",
+                  duration: 40,
+                });
+              }}
+              className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white shrink-0"
+              title="Append a new period to this schedule"
+            >
+              <Plus className="w-2.5 h-2.5" />
+            </button>
+          )}
         </div>
 
         {/* Period Columns */}
@@ -1487,19 +1801,20 @@ export default function Timetable2Page({
           return (
             <div
               key={`timing-${keyPrefix}-${period.id}`}
-              className={`${zm.timingH} relative flex items-center justify-center select-none group/col ${
-                idx < schedule.periods.length - 1
+              className={`${zm.timingH} relative flex items-center justify-center select-none group/col ${idx < schedule.periods.length - 1
                   ? isCustomOrSat
                     ? "border-r border-amber-300 dark:border-amber-800"
                     : "border-r border-slate-400/80 dark:border-slate-600"
                   : ""
-              }`}
+                }`}
             >
               {/* Boundary 0: Morning In-Time */}
               {idx === 0 && (
                 <button
                   type="button"
+                  disabled={!isEditMode}
                   onClick={() => {
+                    if (!isEditMode) return;
                     const startM = timeToMinutes(period.startTime) || 540;
                     const endM = timeToMinutes(period.endTime) || 585;
                     setBoundaryInputTime(period.startTime);
@@ -1514,8 +1829,16 @@ export default function Timetable2Page({
                       periodBEndM: endM,
                     });
                   }}
-                  title={`School Start In-Time: ${period.startTime} (Click to edit)`}
-                  className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold hover:border-emerald-500 hover:text-emerald-600 cursor-pointer transition-colors ${zm.badgeFont}`}
+                  title={
+                    isEditMode
+                      ? `School Start In-Time: ${period.startTime} (Click to edit)`
+                      : `School Start In-Time: ${period.startTime} (Locked in view mode)`
+                  }
+                  className={`absolute left-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${
+                    isEditMode
+                      ? "hover:border-emerald-500 hover:text-emerald-600 cursor-pointer"
+                      : "cursor-default"
+                  } transition-colors ${zm.badgeFont}`}
                 >
                   {formatCalendarLineTime(period.startTime)}
                 </button>
@@ -1524,40 +1847,41 @@ export default function Timetable2Page({
               {/* Center Period Label with Smart Sequence (P1, P2, Lunch Break, P3...) */}
               <div
                 title={`${isBreak ? "Break / Recess" : `Period ${period.label}`}: ${period.startTime} – ${period.endTime} (${durStr})`}
-                className="flex items-center justify-center gap-1 leading-none select-none px-1"
+                className={`flex items-center justify-center gap-1 leading-none select-none px-1 ${
+                  idx === 0 ? "pl-8 sm:pl-9" : ""
+                } ${
+                  idx === schedule.periods.length - 1 ? "pr-8 sm:pr-9" : ""
+                }`}
               >
                 {isBreak && <Coffee className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
                 <span
-                  className={`${zm.pLabelFont} font-bold tracking-tight font-sans ${
-                    isBreak
+                  className={`${zm.pLabelFont} font-bold tracking-tight font-sans ${isBreak
                       ? "text-amber-700 dark:text-amber-300 uppercase text-[9px] font-extrabold"
                       : isCustomOrSat
                         ? "text-amber-800 dark:text-amber-300"
                         : "text-slate-700 dark:text-slate-200"
-                  }`}
+                    }`}
                 >
                   {period.label}
                 </span>
                 <span
-                  className={`text-[8px] ${
-                    isCustomOrSat
+                  className={`text-[8px] ${isCustomOrSat
                       ? "text-amber-400 dark:text-amber-500"
                       : "text-slate-300 dark:text-slate-600"
-                  }`}
+                    }`}
                 >
                   ·
                 </span>
                 <span
-                  className={`${zm.durFont} font-mono tabular-nums font-medium ${
-                    isCustomOrSat
+                  className={`${zm.durFont} font-mono tabular-nums font-medium ${isCustomOrSat
                       ? "text-amber-600 dark:text-amber-400"
                       : "text-slate-400 dark:text-slate-400"
-                  }`}
+                    }`}
                 >
                   {durStr}
                 </span>
 
-                {schedule.periods.length > 1 && (
+                {isEditMode && schedule.periods.length > 1 && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1577,7 +1901,9 @@ export default function Timetable2Page({
                 /* Dismissal Bell */
                 <button
                   type="button"
+                  disabled={!isEditMode}
                   onClick={() => {
+                    if (!isEditMode) return;
                     const startM = timeToMinutes(period.startTime) || 540;
                     const endM = timeToMinutes(period.endTime) || 900;
                     setBoundaryInputTime(period.endTime);
@@ -1592,8 +1918,16 @@ export default function Timetable2Page({
                       periodBEndM: endM,
                     });
                   }}
-                  title={`School Dismissal Out-Time: ${period.endTime} (Click to edit)`}
-                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold hover:border-emerald-500 hover:text-emerald-600 cursor-pointer transition-colors ${zm.badgeFont}`}
+                  title={
+                    isEditMode
+                      ? `School Dismissal Out-Time: ${period.endTime} (Click to edit)`
+                      : `School Dismissal Out-Time: ${period.endTime} (Locked in view mode)`
+                  }
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${
+                    isEditMode
+                      ? "hover:border-emerald-500 hover:text-emerald-600 cursor-pointer"
+                      : "cursor-default"
+                  } transition-colors ${zm.badgeFont}`}
                 >
                   {formatCalendarLineTime(period.endTime)}
                 </button>
@@ -1602,7 +1936,9 @@ export default function Timetable2Page({
                 <>
                   <button
                     type="button"
+                    disabled={!isEditMode}
                     onClick={() => {
+                      if (!isEditMode) return;
                       const nextPeriod = schedule.periods[idx + 1];
                       const curStartM = timeToMinutes(period.startTime) || 540;
                       const nextEndM = timeToMinutes(nextPeriod.endTime) || 630;
@@ -1618,29 +1954,39 @@ export default function Timetable2Page({
                         periodBEndM: nextEndM,
                       });
                     }}
-                    title={`Boundary: ${period.endTime} (Click to adjust boundary)`}
-                    className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold hover:border-emerald-500 hover:text-emerald-600 cursor-pointer transition-colors ${zm.badgeFont}`}
+                    title={
+                      isEditMode
+                        ? `Boundary: ${period.endTime} (Click to adjust boundary)`
+                        : `Boundary: ${period.endTime} (Locked in view mode)`
+                    }
+                    className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${
+                      isEditMode
+                        ? "hover:border-emerald-500 hover:text-emerald-600 cursor-pointer"
+                        : "cursor-default"
+                    } transition-colors ${zm.badgeFont}`}
                   >
                     {formatCalendarLineTime(period.endTime)}
                   </button>
 
                   {/* Hover "+" button on column divider to insert period */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInsertPeriodState({
-                        scheduleId: schedule.id,
-                        insertAfterIdx: idx,
-                        type: "regular",
-                        title: "",
-                        duration: 40,
-                      });
-                    }}
-                    title={`Insert period between ${period.label} and ${displayPeriods[idx + 1].label}`}
-                    className="absolute right-0 top-full -translate-y-1/2 translate-x-1/2 z-30 opacity-0 group-hover/col:opacity-100 w-4 h-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md transition-all scale-90 hover:scale-110 cursor-pointer"
-                  >
-                    <Plus className="w-2.5 h-2.5" />
-                  </button>
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInsertPeriodState({
+                          scheduleId: schedule.id,
+                          insertAfterIdx: idx,
+                          type: "regular",
+                          title: "",
+                          duration: 40,
+                        });
+                      }}
+                      title={`Insert period between ${period.label} and ${displayPeriods[idx + 1].label}`}
+                      className="absolute right-0 top-full -translate-y-1/2 translate-x-1/2 z-30 opacity-0 group-hover/col:opacity-100 w-4 h-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md transition-all scale-90 hover:scale-110 cursor-pointer"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -1651,7 +1997,7 @@ export default function Timetable2Page({
   };
 
   // ── Render Class Timetable Card (with Live Status Ticker & Day Groups) ──
-  const renderTimetableCard = (ttItem: (typeof MOCK_TIMETABLES_V2)[0], ttIdx: number) => {
+  const renderTimetableCard = (ttItem: (typeof MOCK_TIMETABLES_V2)[0], ttIdx: number, isPinned?: boolean) => {
     const zm = getZoomMetrics(zoom);
     const rowH = zm.rowH;
     const dayColWidth = zm.dayColWidth;
@@ -1664,11 +2010,15 @@ export default function Timetable2Page({
     const dayGroups = getDayScheduleGroups(DAYS, dayScheduleMap, bellSchedules);
 
     return (
-      <div key={ttItem.id} id={`table-${ttItem.id}`} className="flex flex-col min-w-0 scroll-mt-2">
-        {/* Header Info (No border line between class section status and table) */}
-        <div className={`flex items-center justify-between flex-wrap gap-2 ${zm.headerPad}`}>
+      <div
+        key={ttItem.id}
+        id={`table-${ttItem.id}`}
+        className="flex flex-col min-w-0 scroll-mt-2 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs overflow-hidden"
+      >
+        {/* Docked Ribbon Header (Directly inside table card frame as top cap) */}
+        <div className="bg-slate-100/95 dark:bg-slate-800/95 border-b border-slate-300 dark:border-slate-700 px-2.5 sm:px-3 py-1 sm:py-1.5 flex items-center justify-between flex-wrap gap-2">
           {/* Left: Class Section & Flat Borderless Status Ticker (Live Spontaneous Updates) */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
             <div className="flex items-center gap-1.5 shrink-0">
               <div className={`rounded-lg flex items-center justify-center shrink-0 ${visualMeta.iconClass} ${zm.badgeContainerH}`}>
                 <GraduationCap className={zm.badgeIcon} />
@@ -1682,9 +2032,14 @@ export default function Timetable2Page({
               <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-semibold ${visualMeta.wingBadge}`}>
                 {ttItem.wing}
               </span>
+              {isPinned && (
+                <span className="text-[10px] font-mono px-2 py-0.2 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-700 flex items-center gap-1 shadow-2xs">
+                  📌 Pinned Class
+                </span>
+              )}
             </div>
 
-            <div className="h-3.5 w-px bg-slate-200 dark:bg-slate-700 shrink-0 hidden sm:block" />
+            <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-700 shrink-0 hidden sm:block" />
 
             {/* Flat Borderless Status Ticker */}
             <div className={`flex items-center gap-2 font-sans flex-wrap ${zm.tickerFont}`}>
@@ -1695,10 +2050,10 @@ export default function Timetable2Page({
                     title={`${sub.name}: ${sub.count} periods assigned / week (${sub.teacher || "Faculty"})`}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full ${sub.dot} shrink-0`} />
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">
                       {sub.name}
                     </span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100 tabular-nums">
+                    <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                       :{sub.count}
                     </span>
                   </span>
@@ -1741,8 +2096,8 @@ export default function Timetable2Page({
           </div>
         </div>
 
-        {/* Grid Canvas with Day Schedule Groups */}
-        <div className={`overflow-x-auto rounded-xl border-2 border-slate-400/90 dark:border-slate-600 border-l-2 ${visualMeta.spineBorder} bg-white dark:bg-slate-900 shadow-xs`}>
+        {/* Grid Canvas with Day Schedule Groups directly below docked ribbon */}
+        <div className="overflow-x-auto">
           <div className="min-w-[max(840px,100%)] w-full flex flex-col">
             {dayGroups.map((group, groupIdx) => {
               const isGroupSatOrCustom = group.scheduleId === "saturday" || group.schedule.isCustom;
@@ -1773,26 +2128,27 @@ export default function Timetable2Page({
                       >
                         {/* Sticky Left Day Cell with Bell Timing Customize Button */}
                         <div
-                          className={`sticky left-0 z-20 px-1 py-0.5 text-center font-bold ${dayFont} border-r-2 flex items-center justify-between select-none uppercase tracking-wider font-mono ${
-                            isSat
+                          className={`sticky left-0 z-20 px-1 py-0.5 text-center font-bold ${dayFont} border-r-2 flex items-center justify-between select-none uppercase tracking-wider font-mono ${isSat
                               ? "bg-amber-200 dark:bg-amber-950 border-slate-400/90 dark:border-slate-600 text-amber-800 dark:text-amber-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
                               : isCustomDay
                                 ? "bg-emerald-100 dark:bg-emerald-950/80 border-slate-400/90 dark:border-slate-600 text-emerald-800 dark:text-emerald-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
                                 : "bg-slate-200 dark:bg-slate-800 border-slate-400/90 dark:border-slate-600 text-slate-800 dark:text-slate-100 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
-                          }`}
+                            }`}
                         >
                           <span className="truncate pl-0.5">{day}</span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenDayMenu({ day, classId: ttItem.id });
-                            }}
-                            className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer"
-                            title={`Configure bell timing for ${day}`}
-                          >
-                            <Clock className="w-2.5 h-2.5" />
-                          </button>
+                          {isEditMode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDayMenu({ day, classId: ttItem.id });
+                              }}
+                              className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer"
+                              title={`Configure bell timing for ${day}`}
+                            >
+                              <Clock className="w-2.5 h-2.5" />
+                            </button>
+                          )}
                         </div>
 
                         {/* Period Cells */}
@@ -1826,6 +2182,7 @@ export default function Timetable2Page({
                             <div
                               key={cellKey}
                               onClick={() => {
+                                if (!isEditMode) return; // Editing locked unless Edit Mode is active
                                 setSelectedCell(isSelected ? null : { day, periodId: cellKey });
                                 setCellAssignment({
                                   classId: ttItem.id,
@@ -1837,14 +2194,22 @@ export default function Timetable2Page({
                                   currentTeacher: assignment.teacher,
                                 });
                               }}
-                              className={`${rowH} px-1.5 flex items-center justify-center transition-all duration-150 cursor-pointer select-none group relative ${
+                              className={`${rowH} px-1.5 flex items-center justify-center transition-all duration-150 select-none group relative ${
+                                isEditMode ? "cursor-pointer" : "cursor-default"
+                              } ${
                                 isSelected
                                   ? "bg-emerald-50 dark:bg-emerald-950/60 ring-2 ring-emerald-500 ring-inset z-10"
                                   : isUnassigned
-                                    ? "bg-slate-50/60 dark:bg-slate-900/40 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30"
+                                    ? isEditMode
+                                      ? "bg-slate-50/60 dark:bg-slate-900/40 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30"
+                                      : "bg-slate-50/60 dark:bg-slate-900/40"
                                     : isSat
-                                      ? "bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-100/30 dark:hover:bg-amber-950/25"
-                                      : "bg-white dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+                                      ? isEditMode
+                                        ? "bg-amber-50/20 dark:bg-amber-950/10 hover:bg-amber-100/30 dark:hover:bg-amber-950/25"
+                                        : "bg-amber-50/20 dark:bg-amber-950/10"
+                                      : isEditMode
+                                        ? "bg-white dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+                                        : "bg-white dark:bg-slate-900"
                               } ${
                                 slotIdx < group.schedule.periods.length - 1
                                   ? "border-r border-slate-400/80 dark:border-slate-600"
@@ -1852,13 +2217,21 @@ export default function Timetable2Page({
                               }`}
                             >
                               {isUnassigned ? (
-                                <div className="text-[10px] font-semibold text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 border border-dashed border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5 transition-colors">
-                                  + Assign
-                                </div>
+                                isEditMode ? (
+                                  <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-dashed border-emerald-400 dark:border-emerald-600 rounded px-1.5 py-0.5 transition-colors">
+                                    + Assign
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                                    —
+                                  </div>
+                                )
                               ) : (
                                 <div
-                                  className={`${subjectFont} truncate whitespace-nowrap text-center leading-tight transition-colors text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400`}
-                                  title={`${assignment.subject} - ${assignment.teacher} (${period.startTime} - ${period.endTime})`}
+                                  className={`${subjectFont} truncate whitespace-nowrap text-center leading-tight transition-colors text-slate-800 dark:text-slate-100 ${
+                                    isEditMode ? "group-hover:text-indigo-600 dark:group-hover:text-indigo-400" : ""
+                                  }`}
+                                  title={`${assignment.subject} - ${assignment.teacher} (${period.startTime} - ${period.endTime})${!isEditMode ? " · [View Only - Enable Edit to modify]" : ""}`}
                                 >
                                   <span>{shortSubject}</span>
                                   <span className="mx-0.5 text-slate-400">·</span>
@@ -1880,13 +2253,496 @@ export default function Timetable2Page({
     );
   };
 
+  // ── Render Teacher-wise Timetable Card (Docked Ribbon Frame) ──
+  const renderTeacherCard = (teacher: TeacherProfile, isPinned?: boolean) => {
+    const zm = getZoomMetrics(zoom);
+    const rowH = zm.rowH;
+    const dayFont = zm.dayFont;
+    const subjectFont = zm.subjectFont;
+
+    const { schedule, assignedCount, freeCount, totalAcademicSlots, classesTaught } =
+      computeTeacherWeekSchedule(teacher.name, classSchedules, MOCK_TIMETABLES_V2);
+
+    const dayGroups = getDayScheduleGroups(DAYS, dayScheduleMap, bellSchedules);
+    const workloadPercent = totalAcademicSlots > 0 ? Math.round((assignedCount / totalAcademicSlots) * 100) : 0;
+
+    return (
+      <div
+        key={`teacher-card-${teacher.id}`}
+        id={`table-teacher-${teacher.id}`}
+        className="flex flex-col min-w-0 scroll-mt-2 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs overflow-hidden"
+      >
+        {/* Docked Ribbon Header for Teacher */}
+        <div className="bg-slate-100/95 dark:bg-slate-800/95 border-b border-slate-300 dark:border-slate-700 px-2.5 sm:px-3 py-1 sm:py-1.5 flex items-center justify-between flex-wrap gap-2">
+          {/* Left: Teacher Info & Class Teacher status */}
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className={`w-6 h-6 rounded-lg ${teacher.avatarColor} text-white flex items-center justify-center font-bold text-[10px] shadow-2xs shrink-0`}>
+                {teacher.initials}
+              </div>
+              <span className="font-extrabold text-slate-900 dark:text-white shrink-0 text-xs sm:text-sm tracking-tight">
+                {teacher.name}
+              </span>
+              <span className="px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide shadow-2xs bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {teacher.primarySubject} Faculty
+              </span>
+              {isPinned && (
+                <span className="text-[10px] font-mono px-2 py-0.2 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-700 flex items-center gap-1 shadow-2xs">
+                  📌 Pinned Faculty
+                </span>
+              )}
+            </div>
+
+            <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-700 shrink-0 hidden sm:block" />
+
+            {/* Teacher Workload Ticker */}
+            <div className={`flex items-center gap-2 font-sans flex-wrap ${zm.tickerFont}`}>
+              <span className="inline-flex items-center gap-1 select-none text-slate-700 dark:text-slate-300" title="Assigned Lectures per Week">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Assigned:</span>
+                <span className="font-bold text-slate-900 dark:text-white tabular-nums">{assignedCount} pds/wk</span>
+              </span>
+
+              <span className="text-slate-300 dark:text-slate-700 select-none">·</span>
+
+              <span className="inline-flex items-center gap-1 select-none text-slate-700 dark:text-slate-300" title="Free Periods per Week">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Free:</span>
+                <span className="font-bold text-slate-900 dark:text-white tabular-nums">{freeCount} pds</span>
+              </span>
+
+              <span className="text-slate-300 dark:text-slate-700 select-none">·</span>
+
+              <span className="inline-flex items-center gap-1 select-none text-slate-700 dark:text-slate-300" title="Workload Load Factor">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Load:</span>
+                <span className="font-bold text-slate-900 dark:text-white tabular-nums">{workloadPercent}%</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Grid Canvas for Teacher */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[max(840px,100%)] w-full flex flex-col">
+            {dayGroups.map((group, groupIdx) => {
+              const isGroupSatOrCustom = group.scheduleId === "saturday" || group.schedule.isCustom;
+              const displayPeriods = computePeriodDisplayItems(group.schedule.periods);
+              const template = `${zm.dayColWidth} repeat(${group.schedule.periods.length}, minmax(105px, 1fr))`;
+
+              return (
+                <div key={`teacher-group-${teacher.id}-${group.scheduleId}-${groupIdx}`} className="flex flex-col">
+                  {/* Timing Header Row */}
+                  {renderTimingHeaderRow(
+                    `teacher-${teacher.id}-${group.scheduleId}-${groupIdx}`,
+                    group.schedule,
+                    !!isGroupSatOrCustom,
+                    group.days,
+                    undefined
+                  )}
+
+                  {/* Day Rows */}
+                  {group.days.map((day) => {
+                    const isCustomDay = (dayScheduleMap[day] || "standard") !== "standard";
+                    const isSat = day === "Sat";
+                    const daySlots = schedule[day] || [];
+
+                    return (
+                      <div
+                        key={`teacher-${teacher.id}-${day}`}
+                        className="grid items-stretch border-b border-slate-400/80 dark:border-slate-600 last:border-b-0"
+                        style={{ gridTemplateColumns: template }}
+                      >
+                        {/* Sticky Left Day Cell */}
+                        <div
+                          className={`sticky left-0 z-20 px-1 py-0.5 text-center font-bold ${dayFont} border-r-2 flex items-center justify-center select-none uppercase tracking-wider font-mono ${
+                            isSat
+                              ? "bg-amber-200 dark:bg-amber-950 border-slate-400/90 dark:border-slate-600 text-amber-800 dark:text-amber-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
+                              : isCustomDay
+                                ? "bg-emerald-100 dark:bg-emerald-950/80 border-slate-400/90 dark:border-slate-600 text-emerald-800 dark:text-emerald-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
+                                : "bg-slate-200 dark:bg-slate-800 border-slate-400/90 dark:border-slate-600 text-slate-800 dark:text-slate-100 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
+                          }`}
+                        >
+                          <span className="truncate">{day}</span>
+                        </div>
+
+                        {/* Period Cells */}
+                        {group.schedule.periods.map((period, slotIdx) => {
+                          const cellItem = daySlots[slotIdx];
+                          const isBreak = period.type === "break" || cellItem === "Break";
+                          const isFree = cellItem === "Free" || !cellItem;
+
+                          if (isBreak) {
+                            return (
+                              <div
+                                key={`tcell-${teacher.id}-${day}-${period.id}`}
+                                className={`${rowH} px-1.5 flex items-center justify-center select-none bg-amber-50/40 dark:bg-amber-950/20 text-amber-600/80 dark:text-amber-400/70 border-r border-amber-200/60 dark:border-amber-900/40 text-[10px] font-mono font-medium`}
+                                title={`${period.title || "Break"} (${period.startTime} - ${period.endTime})`}
+                              >
+                                <span className="truncate">{period.title || "Break"}</span>
+                              </div>
+                            );
+                          }
+
+                          if (isFree) {
+                            return (
+                              <div
+                                key={`tcell-${teacher.id}-${day}-${period.id}`}
+                                className={`${rowH} px-1.5 flex items-center justify-center select-none bg-slate-50/50 dark:bg-slate-900/30 text-slate-400 dark:text-slate-500 border-r border-slate-400/80 dark:border-slate-600 text-[10px] font-mono font-medium`}
+                                title={`Free Period (${period.startTime} - ${period.endTime})`}
+                              >
+                                <span className="px-1.5 py-0.2 rounded bg-slate-100/70 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300/80 dark:border-slate-700/80 text-[9.5px]">
+                                  — Free —
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          // Assigned lecture: cellItem is TeacherSlotAssignment
+                          const assigned = cellItem as TeacherSlotAssignment;
+                          const shortSub = getShortSubject(assigned.subject);
+
+                          if (assigned.isConflict) {
+                            return (
+                              <div
+                                key={`tcell-${teacher.id}-${day}-${period.id}`}
+                                className={`${rowH} px-1.5 flex items-center justify-center transition-all duration-150 select-none border-r border-rose-400 bg-rose-50 dark:bg-rose-950/60`}
+                                title={`Double booking conflict: ${assigned.conflictClasses?.join(", ")}`}
+                              >
+                                <span className="text-[9px] font-extrabold text-rose-600 dark:text-rose-400 truncate">
+                                  ⚠️ {assigned.conflictClasses?.join(" & ")}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={`tcell-${teacher.id}-${day}-${period.id}`}
+                              className={`${rowH} px-1.5 flex items-center justify-center transition-all duration-150 select-none border-r border-slate-400/80 dark:border-slate-600 bg-white dark:bg-slate-900 group hover:bg-slate-100/60 dark:hover:bg-slate-800/60`}
+                              title={`${assigned.className} · ${assigned.subject} (${period.startTime} - ${period.endTime})`}
+                            >
+                              <div className="flex items-center gap-1 min-w-0 max-w-full truncate">
+                                <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-black font-mono shadow-2xs shrink-0 ${assigned.sectionPillClass}`}>
+                                  {assigned.shortCode}
+                                </span>
+                                <span className={`${subjectFont} truncate font-semibold text-slate-800 dark:text-slate-100`}>
+                                  {shortSub}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Render Free Teacher Timetable (Availability & Substitution Board) ──
+  const renderFreeTeachersView = () => {
+    const zm = getZoomMetrics(zoom);
+
+    // Compute free and busy teachers for the selected Day and Slot
+    const freeTeachers: { teacher: TeacherProfile; totalWeeklyLoad: number }[] = [];
+    const busyTeachers: {
+      teacher: TeacherProfile;
+      classCode: string;
+      className: string;
+      subject: string;
+      sectionPillClass: string;
+    }[] = [];
+
+    TEACHERS_LIST.forEach((t) => {
+      let teachingIn: { classCode: string; className: string; subject: string; sectionPillClass: string } | null = null;
+
+      for (const cls of MOCK_CLASSES_LIST) {
+        const slotData = classSchedules[cls.id]?.[freeTeacherDay]?.[freeTeacherSlot];
+        if (slotData && slotData.teacher && slotData.teacher.toLowerCase() === t.name.toLowerCase()) {
+          const meta = getClassVisualMeta(cls);
+          teachingIn = {
+            classCode: meta.shortCode,
+            className: cls.name,
+            subject: slotData.subject,
+            sectionPillClass: meta.sectionPillClass,
+          };
+          break;
+        }
+      }
+
+      // Calculate total weekly load for this teacher
+      let loadCount = 0;
+      DAYS.forEach((d) => {
+        for (let s = 0; s < 8; s++) {
+          if (s !== 4) {
+            for (const cls of MOCK_CLASSES_LIST) {
+              if (classSchedules[cls.id]?.[d]?.[s]?.teacher?.toLowerCase() === t.name.toLowerCase()) {
+                loadCount++;
+                break;
+              }
+            }
+          }
+        }
+      });
+
+      if (teachingIn) {
+        busyTeachers.push({
+          teacher: t,
+          ...teachingIn,
+        });
+      } else {
+        freeTeachers.push({
+          teacher: t,
+          totalWeeklyLoad: loadCount,
+        });
+      }
+    });
+
+    const activePeriod = INITIAL_PERIODS_V2[freeTeacherSlot] || INITIAL_PERIODS_V2[0];
+
+    const filterQuery = searchQuery.trim().toLowerCase();
+    const visibleFreeTeachers = filterQuery
+      ? freeTeachers.filter(
+          (item) =>
+            item.teacher.name.toLowerCase().includes(filterQuery) ||
+            item.teacher.primarySubject.toLowerCase().includes(filterQuery) ||
+            item.teacher.department.toLowerCase().includes(filterQuery)
+        )
+      : freeTeachers;
+    const visibleBusyTeachers = filterQuery
+      ? busyTeachers.filter(
+          (item) =>
+            item.teacher.name.toLowerCase().includes(filterQuery) ||
+            item.subject.toLowerCase().includes(filterQuery) ||
+            item.classCode.toLowerCase().includes(filterQuery)
+        )
+      : busyTeachers;
+
+    return (
+      <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex-1 flex flex-col overflow-y-auto ${zm.cardPad} space-y-4`}>
+        {/* Top Control Bar: Day & Period Pickers */}
+        <div className="p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700/80 shadow-xs flex flex-col gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-500" />
+                Select Period Slot to Check Available Faculty:
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Active: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{freeTeacherDay}</strong> · <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{activePeriod.startTime} – {activePeriod.endTime}</strong>
+            </div>
+          </div>
+
+          {/* Day Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mr-1">Day:</span>
+            {DAYS.map((day) => (
+              <button
+                key={`free-day-${day}`}
+                type="button"
+                onClick={() => setFreeTeacherDay(day)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  freeTeacherDay === day
+                    ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/40"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                {day}
+              </button>
+            ))}
+          </div>
+
+          {/* Period Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mr-1">Period:</span>
+            {INITIAL_PERIODS_V2.map((p, pIdx) => {
+              const isBreak = p.type === "break";
+              if (isBreak) {
+                return (
+                  <span
+                    key={`free-p-${p.id}`}
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40 select-none"
+                  >
+                    Lunch Break
+                  </span>
+                );
+              }
+              const isSelected = freeTeacherSlot === pIdx;
+              return (
+                <button
+                  key={`free-p-${p.id}`}
+                  type="button"
+                  onClick={() => setFreeTeacherSlot(pIdx)}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isSelected
+                      ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-400/40"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  <span>P{pIdx < 4 ? pIdx + 1 : pIdx}</span>
+                  <span className="text-[10px] opacity-75 font-mono hidden sm:inline">({p.startTime})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Summary Metric Counters */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+                Free for Substitution
+              </span>
+              <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
+                {visibleFreeTeachers.length}
+              </span>
+              <span className="text-xs text-emerald-600/80 block">Faculty Members Free</span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
+              <UserCheck className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">
+                Currently In Class
+              </span>
+              <span className="text-2xl font-black text-blue-800 dark:text-blue-200">
+                {visibleBusyTeachers.length}
+              </span>
+              <span className="text-xs text-blue-600/80 block">Lectures in Progress</span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-blue-200/60 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                Total Teaching Staff
+              </span>
+              <span className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                {TEACHERS_LIST.length}
+              </span>
+              <span className="text-xs text-slate-500 block">Active Faculty</span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-slate-200/60 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
+              <User className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Faculty Split View: Free Teachers vs In-Class Teachers */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Available Teachers Column */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                Available Faculty (Free in Period {freeTeacherSlot < 4 ? freeTeacherSlot + 1 : freeTeacherSlot})
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                {visibleFreeTeachers.length} Available
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {visibleFreeTeachers.map(({ teacher, totalWeeklyLoad }) => (
+                <div
+                  key={`free-card-${teacher.id}`}
+                  className="p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/30 dark:bg-emerald-950/20 hover:border-emerald-400 transition-all flex items-center justify-between gap-2 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg ${teacher.avatarColor} text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs`}>
+                      {teacher.initials}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
+                        {teacher.name}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                        {teacher.primarySubject} · {teacher.department}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 block">
+                      {totalWeeklyLoad} pds/wk
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => alert(`Selected ${teacher.name} for substitution during ${freeTeacherDay} Period ${freeTeacherSlot < 4 ? freeTeacherSlot + 1 : freeTeacherSlot}`)}
+                      className="mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-2xs"
+                    >
+                      Assign Sub
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Occupied Teachers Column */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4 text-indigo-500" />
+                Engaged Faculty (Currently Teaching)
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
+                {visibleBusyTeachers.length} Busy
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {visibleBusyTeachers.map(({ teacher, classCode, subject, sectionPillClass }) => (
+                <div
+                  key={`busy-card-${teacher.id}`}
+                  className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-850 flex items-center justify-between gap-2 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg ${teacher.avatarColor} text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs opacity-80`}>
+                      {teacher.initials}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
+                        {teacher.name}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                        {subject}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black font-mono shadow-2xs ${sectionPillClass}`}>
+                      {classCode}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
       {/* ── TOP HEADER ── */}
       <header className="border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl sticky top-0 z-30 px-3 sm:px-6 py-2 shadow-2xs">
         <div className="max-w-[1800px] mx-auto flex items-center justify-between gap-3">
-          {/* Left: Back Icon Button + Timetable Dropdown + Wing Dropdown + Search Button */}
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-wrap">
+          {/* Left: Back Icon Button + Perspective Switcher + Timetable Dropdown + (Wing Dropdown if Classwise) + Search Input + (Edit/Save/Cancel if Classwise) */}
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-wrap flex-1">
             {/* Back to Dashboard Icon Button */}
             <button
               type="button"
@@ -1897,15 +2753,175 @@ export default function Timetable2Page({
               <ArrowLeft className="w-4 h-4" />
             </button>
 
+            {/* ── 0. PERSPECTIVE SWITCHER DROPDOWN ── */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPerspectiveDropdownOpen(!isPerspectiveDropdownOpen);
+                  setIsTimetableDropdownOpen(false);
+                  setIsWingDropdownOpen(false);
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all cursor-pointer shadow-2xs min-w-[160px] sm:min-w-[190px] justify-between ${
+                  perspective === "classwise"
+                    ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                    : perspective === "teacherwise"
+                      ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                      : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                }`}
+                title="Switch Timetable Perspective"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  {perspective === "classwise" && <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                  {perspective === "teacherwise" && <User className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />}
+                  {perspective === "free-teachers" && <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                  <span className="truncate">
+                    {perspective === "classwise"
+                      ? "Class-wise"
+                      : perspective === "teacherwise"
+                        ? "Teacher-wise"
+                        : "Free Teachers"}
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                    isPerspectiveDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Perspective Dropdown Menu */}
+              {isPerspectiveDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsPerspectiveDropdownOpen(false)}
+                  />
+                  <div className="absolute left-0 mt-2 w-72 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-50 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Select Timetable Perspective
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPerspective("classwise");
+                        setIsPerspectiveDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                        perspective === "classwise"
+                          ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <GraduationCap className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold">Class-wise Timetables</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                            Editable
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-normal mt-0.5 leading-tight">
+                          View & edit schedules grouped by class & section
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isEditMode) {
+                          setClassSchedules(JSON.parse(JSON.stringify(savedClassSchedules)));
+                          setBellSchedules(JSON.parse(JSON.stringify(savedBellSchedules)));
+                          setDayScheduleMap(JSON.parse(JSON.stringify(savedDayScheduleMap)));
+                          setBoundaryEdit(null);
+                          setInsertPeriodState(null);
+                          setCellAssignment(null);
+                          setOpenDayMenu(null);
+                          setSelectedCell(null);
+                          setIsEditMode(false);
+                        }
+                        setPerspective("teacherwise");
+                        setIsPerspectiveDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                        perspective === "teacherwise"
+                          ? "bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 font-bold"
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold">Teacher-wise Timetables</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                            Faculty
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-normal mt-0.5 leading-tight">
+                          Faculty rosters, lectures, free hours & workloads
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isEditMode) {
+                          setClassSchedules(JSON.parse(JSON.stringify(savedClassSchedules)));
+                          setBellSchedules(JSON.parse(JSON.stringify(savedBellSchedules)));
+                          setDayScheduleMap(JSON.parse(JSON.stringify(savedDayScheduleMap)));
+                          setBoundaryEdit(null);
+                          setInsertPeriodState(null);
+                          setCellAssignment(null);
+                          setOpenDayMenu(null);
+                          setSelectedCell(null);
+                          setIsEditMode(false);
+                        }
+                        setPerspective("free-teachers");
+                        setIsPerspectiveDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                        perspective === "free-teachers"
+                          ? "bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 font-bold"
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold">Free Teacher Timetable</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                            Substitutions
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-normal mt-0.5 leading-tight">
+                          Period-by-period faculty availability & substitution
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* ── 1. TIMETABLE SELECTOR DROPDOWN ── */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => {
                   setIsTimetableDropdownOpen(!isTimetableDropdownOpen);
+                  setIsPerspectiveDropdownOpen(false);
                   setIsWingDropdownOpen(false);
                 }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs min-w-[200px] sm:min-w-[250px] max-w-[310px] justify-between"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs min-w-[180px] sm:min-w-[220px] max-w-[280px] justify-between"
                 title="Select Timetable"
               >
                 <div className="flex items-center gap-2 truncate">
@@ -1984,107 +3000,183 @@ export default function Timetable2Page({
               )}
             </div>
 
-            {/* ── 2. WING SELECTOR DROPDOWN ── */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsWingDropdownOpen(!isWingDropdownOpen);
-                  setIsTimetableDropdownOpen(false);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs min-w-[150px] sm:min-w-[180px] justify-between"
-                title="Filter by School Wing"
-              >
-                <div className="flex items-center gap-1.5 truncate">
-                  <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span className="truncate">{selectedWingOption.label}</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                    {selectedWingOption.count}
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                      isWingDropdownOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </div>
-              </button>
-
-              {/* Wing Dropdown Menu */}
-              {isWingDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setIsWingDropdownOpen(false)}
-                  />
-                  <div className="absolute left-0 mt-2 w-full min-w-[220px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-50 p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
-                    <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Select School Wing
-                    </div>
-                    {WING_OPTIONS.map((w) => {
-                      const isSelected = w.id === selectedWing;
-                      return (
-                        <button
-                          key={w.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedWing(w.id);
-                            setIsWingDropdownOpen(false);
-                          }}
-                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-colors cursor-pointer ${
-                            isSelected
-                              ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
-                              : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                          }`}
-                        >
-                          <div className="truncate">
-                            <div>{w.label}</div>
-                            <div className="text-[10px] text-slate-400 font-normal">
-                              {w.description}
-                            </div>
-                          </div>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0 ml-1.5">
-                            {w.count}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* ── 3. SEARCH BUTTON TO FIND CLASS, SECTION, TEACHER ── */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setIsSearchModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs group"
-                title="Find Class, Section, or Teacher (Press ⌘K or Ctrl+K)"
-              >
-                <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
-                <span className="hidden sm:inline text-slate-500 dark:text-slate-400">
-                  {activeFilterQuery ? `Filter: "${activeFilterQuery}"` : "Find class, section, teacher..."}
-                </span>
-                <span className="sm:hidden">Find</span>
-                <kbd className="hidden md:inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400">
-                  ⌘K
-                </kbd>
-              </button>
-
-              {activeFilterQuery && (
+            {/* ── 2. WING SELECTOR DROPDOWN (CLASS-WISE & TEACHER-WISE) ── */}
+            {(perspective === "classwise" || perspective === "teacherwise") && (
+              <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setActiveFilterQuery("")}
-                  className="px-2 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900/60 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-                  title="Clear active search filter"
+                  onClick={() => {
+                    setIsWingDropdownOpen(!isWingDropdownOpen);
+                    setIsPerspectiveDropdownOpen(false);
+                    setIsTimetableDropdownOpen(false);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs min-w-[130px] sm:min-w-[160px] justify-between"
+                  title="Filter by School Wing"
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span className="truncate">{selectedWingOption.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                      {selectedWingOption.count}
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                        isWingDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                {/* Wing Dropdown Menu */}
+                {isWingDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsWingDropdownOpen(false)}
+                    />
+                    <div className="absolute left-0 mt-2 w-full min-w-[220px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-50 p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Select School Wing
+                      </div>
+                      {currentWingOptions.map((w) => {
+                        const isSelected = w.id === selectedWing;
+                        return (
+                          <button
+                            key={w.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedWing(w.id);
+                              setIsWingDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            <div className="truncate">
+                              <div>{w.label}</div>
+                              <div className="text-[10px] text-slate-400 font-normal">
+                                {w.description}
+                              </div>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0 ml-1.5">
+                              {w.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── 3. COMMA-SEPARATED SEARCH BAR WITH PINNED STACKING ── */}
+            <div className="relative flex items-center min-w-[180px] sm:min-w-[230px] max-w-[310px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  perspective === "classwise"
+                    ? "Search (e.g. 10-A, Manish)..."
+                    : perspective === "teacherwise"
+                      ? "Search teacher or subject..."
+                      : "Filter faculty..."
+                }
+                className="w-full pl-7 pr-6 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium shadow-2xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-1.5 p-0.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  title="Clear search query"
                 >
                   <X className="w-3 h-3" />
-                  <span className="hidden sm:inline">Clear</span>
                 </button>
               )}
             </div>
+
+            {/* ── 4. EDIT / SAVE & CANCEL CONTROLS (CLASS-WISE EXCLUSIVE) ── */}
+            {perspective === "classwise" && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!isEditMode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSavedClassSchedules(JSON.parse(JSON.stringify(classSchedules)));
+                      setSavedBellSchedules(JSON.parse(JSON.stringify(bellSchedules)));
+                      setSavedDayScheduleMap(JSON.parse(JSON.stringify(dayScheduleMap)));
+                      setIsEditMode(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0"
+                    title="Click to enable editing of class timetables"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Timetable</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 shrink-0 animate-in fade-in duration-150">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!hasUnsavedChanges) return;
+                        setSavedClassSchedules(JSON.parse(JSON.stringify(classSchedules)));
+                        setSavedBellSchedules(JSON.parse(JSON.stringify(bellSchedules)));
+                        setSavedDayScheduleMap(JSON.parse(JSON.stringify(dayScheduleMap)));
+                        setBoundaryEdit(null);
+                        setInsertPeriodState(null);
+                        setCellAssignment(null);
+                        setOpenDayMenu(null);
+                        setSelectedCell(null);
+                        setIsEditMode(false);
+                        setSaveSuccessToast("Timetable changes saved successfully!");
+                        setTimeout(() => setSaveSuccessToast(null), 3500);
+                      }}
+                      disabled={!hasUnsavedChanges}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs ${
+                        hasUnsavedChanges
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md ring-2 ring-emerald-400/50 cursor-pointer active:scale-95"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300/40 dark:border-slate-700/40"
+                      }`}
+                      title={
+                        hasUnsavedChanges
+                          ? "Save changes to class schedules"
+                          : "No changes made yet. Click a cell, period boundary, or + to edit."
+                      }
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Changes</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClassSchedules(JSON.parse(JSON.stringify(savedClassSchedules)));
+                        setBellSchedules(JSON.parse(JSON.stringify(savedBellSchedules)));
+                        setDayScheduleMap(JSON.parse(JSON.stringify(savedDayScheduleMap)));
+                        setBoundaryEdit(null);
+                        setInsertPeriodState(null);
+                        setCellAssignment(null);
+                        setOpenDayMenu(null);
+                        setSelectedCell(null);
+                        setIsEditMode(false);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs active:scale-95"
+                      title="Discard changes and exit edit mode"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Cancel</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Zoom Controls & Theme Toggle */}
@@ -2137,16 +3229,122 @@ export default function Timetable2Page({
 
       {/* ── MAIN WORKSPACE CONTENT ── */}
       <main className="flex-1 w-full max-w-[1800px] mx-auto p-2 sm:p-3 flex flex-col gap-2">
-        {/* ── TIMETABLE 2 CLASSES CONTAINER (PLACED DIRECTLY BELOW HEADER) ── */}
-        {(() => {
+        {/* Floating Save Toast */}
+        {saveSuccessToast && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-emerald-600 text-white font-bold text-xs shadow-2xl animate-in slide-in-from-bottom-5 duration-200">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{saveSuccessToast}</span>
+          </div>
+        )}
+
+        {/* ── PERSPECTIVE 1: FREE TEACHERS ── */}
+        {perspective === "free-teachers" && renderFreeTeachersView()}
+
+        {/* ── PERSPECTIVE 2: TEACHER-WISE TIMETABLES ── */}
+        {perspective === "teacherwise" && (() => {
           const zm = getZoomMetrics(zoom);
+          const { pinned, remaining } = teacherWiseData;
+          const totalCount = pinned.length + remaining.length;
 
           return (
             <div
               className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex-1 flex flex-col overflow-y-auto ${zm.cardPad}`}
             >
-              <div className={`flex flex-col ${zm.cardGap}`}>
-                {timetablesToRender.length === 0 ? (
+              <div className="flex flex-col gap-1.5 sm:gap-2">
+                {totalCount === 0 ? (
+                  <div className="py-16 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                      <Search className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                        No Teachers Found
+                      </h4>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                        No faculty found {selectedWing !== "all" ? `teaching in the "${selectedWing}"` : ""}{searchQuery ? ` matching search "${searchQuery}"` : ""}.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedWing("all");
+                        setSearchQuery("");
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-2xs inline-block"
+                    >
+                      Reset All Filters (Show All Faculty)
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Pinned Teachers (from search tokens) */}
+                    {pinned.length > 0 && (
+                      <div className="space-y-1.5 sm:space-y-2">
+                        <div className="flex items-center gap-2 px-1 pt-1 text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                          <span>📌 Pinned Faculty Timetables ({pinned.length})</span>
+                          <div className="h-px flex-1 bg-amber-200 dark:bg-amber-900/60" />
+                        </div>
+                        {pinned.map((teacher) => renderTeacherCard(teacher, true))}
+                      </div>
+                    )}
+
+                    {/* Remaining Teachers */}
+                    {remaining.length > 0 && (
+                      <div className="space-y-1.5 sm:space-y-2">
+                        {pinned.length > 0 && (
+                          <div className="flex items-center gap-2 px-1 pt-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span>All Other Faculty Timetables ({remaining.length})</span>
+                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                          </div>
+                        )}
+                        {remaining.map((teacher) => renderTeacherCard(teacher, false))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── PERSPECTIVE 3: CLASS-WISE TIMETABLES ── */}
+        {perspective === "classwise" && (() => {
+          const zm = getZoomMetrics(zoom);
+          const hasSearch = searchTokens.length > 0;
+
+          return (
+            <div
+              className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex-1 flex flex-col overflow-y-auto ${zm.cardPad}`}
+            >
+              <div className="flex flex-col gap-1.5 sm:gap-2">
+                {/* 1. If comma-separated search matched teachers, pin their Teacher Cards at the very top! */}
+                {hasSearch && matchedTeachersFromSearch.length > 0 && (
+                  <div className="space-y-1.5 sm:space-y-2 pb-1">
+                    <div className="flex items-center gap-2 px-1 text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                      <span>📌 Pinned Teacher Schedules ({matchedTeachersFromSearch.length})</span>
+                      <div className="h-px flex-1 bg-amber-200 dark:bg-amber-900/60" />
+                    </div>
+                    {matchedTeachersFromSearch.map((teacher) => renderTeacherCard(teacher, true))}
+                  </div>
+                )}
+
+                {/* 2. If comma-separated search matched classes, pin their Class Cards next! */}
+                {hasSearch && matchedClassesFromSearch.length > 0 && (
+                  <div className="space-y-1.5 sm:space-y-2 pb-1">
+                    <div className="flex items-center gap-2 px-1 text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
+                      <span>📌 Pinned Class Schedules ({matchedClassesFromSearch.length})</span>
+                      <div className="h-px flex-1 bg-indigo-200 dark:bg-indigo-900/60" />
+                    </div>
+                    {matchedClassesFromSearch.map((cls, idx) => (
+                      <React.Fragment key={`pinned-cls-${cls.id}`}>
+                        {renderTimetableCard(cls, idx, true)}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+
+                {/* 3. Chronological Remaining Classes below */}
+                {remainingClassesToRender.length === 0 && (!hasSearch || (matchedTeachersFromSearch.length === 0 && matchedClassesFromSearch.length === 0)) ? (
                   <div className="py-16 text-center space-y-3">
                     <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
                       <Search className="w-6 h-6" />
@@ -2156,14 +3354,14 @@ export default function Timetable2Page({
                         No Classes Found
                       </h4>
                       <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-                        No classes match {selectedWing !== "all" ? `the "${selectedWing}" wing` : ""}{activeFilterQuery ? ` or search filter "${activeFilterQuery}"` : ""}.
+                        No classes match {selectedWing !== "all" ? `the "${selectedWing}" wing` : ""}{searchQuery ? ` or search "${searchQuery}"` : ""}.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedWing("all");
-                        setActiveFilterQuery("");
+                        setSearchQuery("");
                       }}
                       className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-2xs inline-block"
                     >
@@ -2171,14 +3369,19 @@ export default function Timetable2Page({
                     </button>
                   </div>
                 ) : (
-                  timetablesToRender.map((tt, idx) => (
-                    <React.Fragment key={tt.id}>
-                      {renderTimetableCard(tt, idx)}
-                      {idx < timetablesToRender.length - 1 && (
-                        <div className="border-b-2 border-slate-400 dark:border-slate-500 my-1.5" />
-                      )}
-                    </React.Fragment>
-                  ))
+                  <>
+                    {hasSearch && (matchedTeachersFromSearch.length > 0 || matchedClassesFromSearch.length > 0) && remainingClassesToRender.length > 0 && (
+                      <div className="flex items-center gap-2 px-1 pt-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        <span>All Other Classes ({remainingClassesToRender.length})</span>
+                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                      </div>
+                    )}
+                    {remainingClassesToRender.map((tt, idx) => (
+                      <React.Fragment key={tt.id}>
+                        {renderTimetableCard(tt, idx, false)}
+                      </React.Fragment>
+                    ))}
+                  </>
                 )}
               </div>
             </div>
@@ -2482,11 +3685,10 @@ export default function Timetable2Page({
                       );
                     }
                   }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
-                    boundaryInfo?.isValid
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${boundaryInfo?.isValid
                       ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20"
                       : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
-                  }`}
+                    }`}
                 >
                   Apply Boundary
                 </button>
@@ -2539,11 +3741,10 @@ export default function Timetable2Page({
                       prev ? { ...prev, type: "regular", title: "" } : null
                     )
                   }
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                    insertPeriodState.type === "regular"
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${insertPeriodState.type === "regular"
                       ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30"
                       : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 font-bold text-xs">
                     <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -2560,19 +3761,18 @@ export default function Timetable2Page({
                     setInsertPeriodState((prev) =>
                       prev
                         ? {
-                            ...prev,
-                            type: "break",
-                            title: prev.title || "Break",
-                            duration: prev.duration === 40 ? 20 : prev.duration,
-                          }
+                          ...prev,
+                          type: "break",
+                          title: prev.title || "Break",
+                          duration: prev.duration === 40 ? 20 : prev.duration,
+                        }
                         : null
                     )
                   }
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                    insertPeriodState.type === "break"
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${insertPeriodState.type === "break"
                       ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/30"
                       : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 font-bold text-xs">
                     <Coffee className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -2639,11 +3839,10 @@ export default function Timetable2Page({
                     onClick={() =>
                       setInsertPeriodState((prev) => (prev ? { ...prev, duration: d } : null))
                     }
-                    className={`py-2 rounded-xl text-xs font-bold font-mono transition-all border cursor-pointer ${
-                      insertPeriodState.duration === d
+                    className={`py-2 rounded-xl text-xs font-bold font-mono transition-all border cursor-pointer ${insertPeriodState.duration === d
                         ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                         : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400"
-                    }`}
+                      }`}
                   >
                     {d}m
                   </button>
@@ -2802,11 +4001,10 @@ export default function Timetable2Page({
                             cat.teacher
                           )
                         }
-                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 group ${
-                          isSelected
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 group ${isSelected
                             ? "border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 ring-2 ring-indigo-500/30"
                             : "border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 bg-white dark:bg-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
