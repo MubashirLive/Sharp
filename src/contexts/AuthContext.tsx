@@ -97,15 +97,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfileData(session.user.id).finally(() => setLoading(false));
-      } else {
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          loadProfileData(session.user.id).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("[AuthContext] getSession error:", err);
         setLoading(false);
-      }
-    });
+      });
 
     return () => sub.subscription.unsubscribe();
   }, []);

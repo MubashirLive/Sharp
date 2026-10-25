@@ -40,11 +40,19 @@ import {
   School,
   Home,
   Zap,
+  Target,
+  BookCheck,
+  CheckSquare,
 } from "lucide-react";
 import MySchoolSubjectTab from "../components/MySchoolSubjectTab";
-import TimetablePage from "./TimetablePage";
 import Timetable2Page from "./Timetable2Page";
-import Timetable3Page from "./Timetable3Page";
+import CurriculumStudioPage from "./CurriculumStudioPage";
+import TeacherAttendancePage from "./TeacherAttendancePage";
+import ExaminationPage from "./ExaminationPage";
+import TestPage from "./TestPage";
+import NotebookCheckingPage from "./NotebookCheckingPage";
+import TaskPage from "./TaskPage";
+import MeetingPage from "./MeetingPage";
 import schoolLogo from "../assets/ideal-logo.jpg";
 import ThemeToggle from "../components/ThemeToggle";
 
@@ -145,7 +153,18 @@ export default function PrincipalLoginPage({
 
   // Authenticated State -> When true, enters dashboard/workspace
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentScreen, setCurrentScreen] = useState<"dashboard" | "my_school_full" | "timetable" | "timetable_2" | "timetable_3">("dashboard");
+  const [currentScreen, setCurrentScreen] = useState<
+    | "dashboard"
+    | "my_school_full"
+    | "timetable"
+    | "curriculum_studio"
+    | "teacher_attendance"
+    | "examination"
+    | "test"
+    | "notebook_checking"
+    | "task"
+    | "meeting"
+  >("dashboard");
   const [activeSchoolTab, setActiveSchoolTab] = useState<
     "profile" | "classes" | "sessions" | "subjects" | "wings" | "houses" | "departments"
   >("subjects");
@@ -291,43 +310,104 @@ export default function PrincipalLoginPage({
   if (isAuthenticated) {
     const user = matchedPrincipal || MOCK_PRINCIPALS["principal@stxaviers.edu.in"];
 
-    // ── 1. TIMETABLE FULL PAGE ──
+    // ── 1. TIMETABLE FULL PAGE (Timetable2 renamed to Timetable) ──
     if (currentScreen === "timetable") {
-      return (
-        <TimetablePage
-          user={user}
-          onBackToDashboard={() => setCurrentScreen("dashboard")}
-          onOpenMySchool={() => setCurrentScreen("my_school_full")}
-          onOpenTimetable2={() => setCurrentScreen("timetable_2")}
-          onOpenTimetable3={() => setCurrentScreen("timetable_3")}
-          onSignOut={handleSignOut}
-        />
-      );
-    }
-
-    // ── 2. TIMETABLE 2 FULL PAGE (EXPERIMENTAL UI/UX SANDBOX) ──
-    if (currentScreen === "timetable_2") {
       return (
         <Timetable2Page
           user={user}
           onBackToDashboard={() => setCurrentScreen("dashboard")}
           onOpenMySchool={() => setCurrentScreen("my_school_full")}
-          onOpenTimetable1={() => setCurrentScreen("timetable")}
-          onOpenTimetable3={() => setCurrentScreen("timetable_3")}
           onSignOut={handleSignOut}
         />
       );
     }
 
-    // ── 3. TIMETABLE 3 FULL PAGE (INTERACTIVE STUDIO SANDBOX) ──
-    if (currentScreen === "timetable_3") {
+    // ── 2. CURRICULUM STUDIO FULL PAGE ──
+    if (currentScreen === "curriculum_studio") {
       return (
-        <Timetable3Page
+        <CurriculumStudioPage
           user={user}
           onBackToDashboard={() => setCurrentScreen("dashboard")}
           onOpenMySchool={() => setCurrentScreen("my_school_full")}
-          onOpenTimetable1={() => setCurrentScreen("timetable")}
-          onOpenTimetable2={() => setCurrentScreen("timetable_2")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
+
+    // ── 3. TEACHER ATTENDANCE FULL PAGE ──
+    if (currentScreen === "teacher_attendance") {
+      return (
+        <TeacherAttendancePage
+          user={user}
+          onBackToDashboard={() => setCurrentScreen("dashboard")}
+          onOpenMySchool={() => setCurrentScreen("my_school_full")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
+
+    // ── 4. EXAMINATION FULL PAGE ──
+    if (currentScreen === "examination") {
+      return (
+        <ExaminationPage
+          user={user}
+          onBackToDashboard={() => setCurrentScreen("dashboard")}
+          onOpenMySchool={() => setCurrentScreen("my_school_full")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
+
+    // ── 5. TEST FULL PAGE ──
+    if (currentScreen === "test") {
+      return (
+        <TestPage
+          user={user}
+          onBackToDashboard={() => setCurrentScreen("dashboard")}
+          onOpenMySchool={() => setCurrentScreen("my_school_full")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
+
+    // ── 6. NOTEBOOK CHECKING FULL PAGE ──
+    if (currentScreen === "notebook_checking") {
+      return (
+        <NotebookCheckingPage
+          user={user}
+          onBackToDashboard={() => setCurrentScreen("dashboard")}
+          onOpenMySchool={() => setCurrentScreen("my_school_full")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
+
+    // ── 7. TASK FULL PAGE ──
+    if (currentScreen === "task") {
+      return (
+        <TaskPage
+          user={user}
+          onBackToDashboard={() => setCurrentScreen("dashboard")}
+          onOpenMySchool={() => setCurrentScreen("my_school_full")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
+
+    // ── 8. MEETING FULL PAGE ──
+    if (currentScreen === "meeting") {
+      return (
+        <MeetingPage
+          user={user}
+          onBackToDashboard={() => setCurrentScreen("dashboard")}
+          onOpenMySchool={() => setCurrentScreen("my_school_full")}
+          onOpenTimetable={() => setCurrentScreen("timetable")}
           onSignOut={handleSignOut}
         />
       );
@@ -357,24 +437,6 @@ export default function PrincipalLoginPage({
                 >
                   <Clock className="w-3.5 h-3.5" />
                   <span>Time Table</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentScreen("timetable_2")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-xs font-semibold border border-emerald-200 dark:border-emerald-800 transition-all cursor-pointer shadow-2xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Time Table 2</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentScreen("timetable_3")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-semibold border border-amber-200 dark:border-amber-800 transition-all cursor-pointer shadow-2xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Time Table 3</span>
                 </button>
 
                 <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
@@ -485,20 +547,6 @@ export default function PrincipalLoginPage({
               >
                 Time Table
               </button>
-              <button
-                type="button"
-                onClick={() => setCurrentScreen("timetable_2")}
-                className="px-3 py-1.5 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                Time Table 2
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentScreen("timetable_3")}
-                className="px-3 py-1.5 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                Time Table 3
-              </button>
             </div>
 
             {/* Right Profile, Theme Toggle & Sign Out */}
@@ -543,7 +591,7 @@ export default function PrincipalLoginPage({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* ── CARD 1: MY SCHOOL ── */}
               <motion.div
                 whileHover={{ y: -4 }}
@@ -590,26 +638,26 @@ export default function PrincipalLoginPage({
                 </div>
               </motion.div>
 
-              {/* ── CARD 2: TIME TABLE ── */}
+              {/* ── CARD 2: TIME TABLE (RENAMED FROM TIMETABLE 2) ── */}
               <motion.div
                 whileHover={{ y: -4 }}
                 transition={{ duration: 0.2 }}
                 onClick={() => setCurrentScreen("timetable")}
-                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-violet-400 dark:hover:border-violet-500 hover:shadow-xl hover:shadow-violet-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
               >
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25 group-hover:scale-105 transition-transform">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 group-hover:scale-105 transition-transform">
                       <Clock className="w-7 h-7" />
                     </div>
                     <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>Term 1 Active</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Timeline Active</span>
                     </span>
                   </div>
 
                   <div className="space-y-1.5">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-2">
                       <span>Time Table</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -620,113 +668,348 @@ export default function PrincipalLoginPage({
                   {/* Feature Badges */}
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Weekly Grid Matrix
+                      Timeline Axis
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                       10 Periods/Day
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Draft Revisions
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-violet-600 dark:text-violet-400">
-                  <span>Open Time Table</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </motion.div>
-
-              {/* ── CARD 3: TIME TABLE 2 (PROTOTYPE UI/UX) ── */}
-              <motion.div
-                whileHover={{ y: -4 }}
-                transition={{ duration: 0.2 }}
-                onClick={() => setCurrentScreen("timetable_2")}
-                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
-              >
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 group-hover:scale-105 transition-transform">
-                      <Sparkles className="w-7 h-7" />
-                    </div>
-                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>Sandbox v2</span>
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-2">
-                      <span>Time Table 2</span>
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Recessed grid matrix sandbox for testing period grid paradigms, inline durations, and section status.
-                    </p>
-                  </div>
-
-                  {/* Feature Badges */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Recessed Grid
-                    </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Scale Timings
-                    </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Class Status
+                      Zero Conflict
                     </span>
                   </div>
                 </div>
 
                 <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  <span>Open Time Table 2</span>
+                  <span>Open Time Table</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </motion.div>
 
-              {/* ── CARD 4: TIME TABLE 3 (INTERACTIVE STUDIO) ── */}
+              {/* ── CARD 3: CURRICULUM STUDIO ── */}
               <motion.div
                 whileHover={{ y: -4 }}
                 transition={{ duration: 0.2 }}
-                onClick={() => setCurrentScreen("timetable_3")}
-                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-xl hover:shadow-amber-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+                onClick={() => setCurrentScreen("curriculum_studio")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl hover:shadow-blue-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
               >
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 group-hover:scale-105 transition-transform">
-                      <Zap className="w-7 h-7" />
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 group-hover:scale-105 transition-transform">
+                      <BookOpen className="w-7 h-7" />
                     </div>
-                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Studio Studio</span>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      <span>Syllabus Pacing</span>
                     </span>
                   </div>
 
                   <div className="space-y-1.5">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-2">
-                      <span>Time Table 3</span>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                      <span>Curriculum Studio</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Interactive timetable studio with color-coded subject assignment palette, educator load quotas, and slot details.
+                      Track syllabus pacing against academic calendar, chapter milestones, lesson plans, and learning outcomes.
                     </p>
                   </div>
 
                   {/* Feature Badges */}
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Subject Palette
+                      14 Units
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Educator Quota
+                      74% Pacing
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      Fast Reassign
+                      Weekly Plans
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400">
+                  <span>Open Curriculum Studio</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* ── CARD 4: TEACHER ATTENDANCE ── */}
+              <motion.div
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setCurrentScreen("teacher_attendance")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-600 flex items-center justify-center text-white shadow-lg shadow-teal-500/25 group-hover:scale-105 transition-transform">
+                      <UserCheck className="w-7 h-7" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Live Biometric</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-2">
+                      <span>Teacher Attendance</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Live biometric punch logs, teacher absence tracking, automated proxy/substitute dispatch, and leave audit.
+                    </p>
+                  </div>
+
+                  {/* Feature Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      96.4% Present
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      3 Substitutes
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      Biometric Sync
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  <span>Open Teacher Attendance</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* ── CARD 5: EXAMINATION ── */}
+              <motion.div
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setCurrentScreen("examination")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-xl hover:shadow-purple-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/25 group-hover:scale-105 transition-transform">
+                      <Award className="w-7 h-7" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                      <span>Term Cycle</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-2">
+                      <span>Examination</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Term examination datesheets, hall ticket admit card generation, invigilation duty rosters, and marks entry.
+                    </p>
+                  </div>
+
+                  {/* Feature Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      Half-Yearly
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      96.8% Invigilation
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      Admit Cards
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-purple-600 dark:text-purple-400">
+                  <span>Open Examination</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* ── CARD 6: TEST ── */}
+              <motion.div
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setCurrentScreen("test")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-400 dark:hover:border-teal-500 hover:shadow-xl hover:shadow-teal-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-500/25 group-hover:scale-105 transition-transform">
+                      <Target className="w-7 h-7" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                      <span>Weekly Trackers</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors flex items-center gap-2">
+                      <span>Test</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Formative cycle assessments, weekly unit tests, class score bell curves, rubric evaluation, and remedial support.
+                    </p>
+                  </div>
+
+                  {/* Feature Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      16 Tests Active
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      81.6% Avg
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      17 Remedial
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-teal-600 dark:text-teal-400">
+                  <span>Open Test</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* ── CARD 7: NOTEBOOK CHECKING ── */}
+              <motion.div
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setCurrentScreen("notebook_checking")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-xl hover:shadow-amber-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 group-hover:scale-105 transition-transform">
+                      <BookCheck className="w-7 h-7" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      <span>Quality Audit</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-2">
+                      <span>Notebook Checking</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Academic notebook inspection, teacher checking backlogs, index validation, error corrections, and parent endorsement.
+                    </p>
+                  </div>
+
+                  {/* Feature Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      124/140 Audited
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      92.4% Quality
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      16 Overdue
                     </span>
                   </div>
                 </div>
 
                 <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-400">
-                  <span>Open Time Table 3</span>
+                  <span>Open Notebook Checking</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* ── CARD 8: TASK ── */}
+              <motion.div
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setCurrentScreen("task")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-sky-400 dark:hover:border-sky-500 hover:shadow-xl hover:shadow-sky-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/25 group-hover:scale-105 transition-transform">
+                      <CheckSquare className="w-7 h-7" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-sky-50 dark:bg-sky-950/80 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                      <span>Institutional Kanban</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors flex items-center gap-2">
+                      <span>Task</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Administrative action items, statutory compliance deadlines, CBSE SARAS requirements, and staff delegation.
+                    </p>
+                  </div>
+
+                  {/* Feature Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      28 Tasks
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      64 Done
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      5 Urgent
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-sky-600 dark:text-sky-400">
+                  <span>Open Task</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+
+              {/* ── CARD 9: MEETING ── */}
+              <motion.div
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setCurrentScreen("meeting")}
+                className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-950/5 dark:hover:shadow-black/40 shadow-sm transition-all text-left flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform">
+                      <Users className="w-7 h-7" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                      <span>Council & PTM</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <span>Meeting</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Staff morning huddles, Academic Council meetings, Parent-Teacher conference slot coordination, and signed MOMs.
+                    </p>
+                  </div>
+
+                  {/* Feature Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      6 Scheduled
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      92% PTM Slots
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      18 MOM Items
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                  <span>Open Meeting</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </motion.div>
