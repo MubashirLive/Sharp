@@ -28,6 +28,8 @@ import {
   UserCheck,
   User,
   Save,
+  Copy,
+  FileText,
 } from "lucide-react";
 import ThemeToggle from "../components/ThemeToggle";
 
@@ -591,6 +593,29 @@ function generateInitialClassSchedules(
   return result;
 }
 
+export function createEmptyClassWeek(): Record<string, { subject: string; teacher: string }[]> {
+  const classWeek: Record<string, { subject: string; teacher: string }[]> = {};
+  DAYS.forEach((day) => {
+    const daySlots: { subject: string; teacher: string }[] = [];
+    for (let slot = 0; slot < 8; slot++) {
+      daySlots.push({ subject: "Unassigned", teacher: "Unassigned" });
+    }
+    classWeek[day] = daySlots;
+  });
+  return classWeek;
+}
+
+export function createEmptySchoolSchedules(): Record<
+  string,
+  Record<string, { subject: string; teacher: string }[]>
+> {
+  const result: Record<string, Record<string, { subject: string; teacher: string }[]>> = {};
+  MOCK_CLASSES_LIST.forEach((c) => {
+    result[c.id] = createEmptyClassWeek();
+  });
+  return result;
+}
+
 const CLASS_SCHEDULES: Record<
   string,
   Record<string, { subject: string; teacher: string }[]>
@@ -998,6 +1023,207 @@ export default function Timetable2Page({
     Record<string, Record<string, { subject: string; teacher: string }[]>>
   >(CLASS_SCHEDULES);
 
+  // Dynamic Master Timetables state & multi-timetable snapshot store
+  const [masterTimetables, setMasterTimetables] = useState<MasterTimetable[]>(MASTER_TIMETABLES);
+  const [timetablesStore, setTimetablesStore] = useState<
+    Record<
+      string,
+      {
+        bellSchedules: Record<string, BellSchedule>;
+        dayScheduleMap: Record<string, string>;
+        classSchedules: Record<string, Record<string, { subject: string; teacher: string }[]>>;
+      }
+    >
+  >({
+    "tt-main": {
+      bellSchedules: INITIAL_BELL_SCHEDULES,
+      dayScheduleMap: INITIAL_DAY_SCHEDULE_MAP,
+      classSchedules: CLASS_SCHEDULES,
+    },
+    "tt-winter": {
+      bellSchedules: INITIAL_BELL_SCHEDULES,
+      dayScheduleMap: INITIAL_DAY_SCHEDULE_MAP,
+      classSchedules: CLASS_SCHEDULES,
+    },
+    "tt-exam": {
+      bellSchedules: INITIAL_BELL_SCHEDULES,
+      dayScheduleMap: INITIAL_DAY_SCHEDULE_MAP,
+      classSchedules: CLASS_SCHEDULES,
+    },
+  });
+
+  const switchTimetable = (targetId: string) => {
+    if (targetId === selectedTimetableId) return;
+
+    // Snapshot current active state before switching
+    setTimetablesStore((prev) => ({
+      ...prev,
+      [selectedTimetableId]: {
+        bellSchedules,
+        dayScheduleMap,
+        classSchedules,
+      },
+    }));
+
+    const targetData = timetablesStore[targetId] || {
+      bellSchedules: INITIAL_BELL_SCHEDULES,
+      dayScheduleMap: INITIAL_DAY_SCHEDULE_MAP,
+      classSchedules: CLASS_SCHEDULES,
+    };
+
+    setBellSchedules(targetData.bellSchedules);
+    setDayScheduleMap(targetData.dayScheduleMap);
+    setClassSchedules(targetData.classSchedules);
+    setSavedBellSchedules(targetData.bellSchedules);
+    setSavedDayScheduleMap(targetData.dayScheduleMap);
+    setSavedClassSchedules(targetData.classSchedules);
+    setSelectedTimetableId(targetId);
+  };
+
+  // Create Timetable Modal Wizard state
+  const [isCreateTimetableModalOpen, setIsCreateTimetableModalOpen] = useState(false);
+  const [createTimetableForm, setCreateTimetableForm] = useState<{
+    name: string;
+    setupMethod: "scratch" | "clone";
+    sourceTimetableId: string;
+    cloneBellSchedules: boolean;
+    cloneAllocations: boolean;
+    selectiveWings: boolean;
+    selectedWing: string;
+  }>({
+    name: "Summer Academic Timetable 2026-27",
+    setupMethod: "scratch",
+    sourceTimetableId: "tt-main",
+    cloneBellSchedules: true,
+    cloneAllocations: true,
+    selectiveWings: false,
+    selectedWing: "all",
+  });
+
+  const openCreateTimetableModal = (method: "scratch" | "clone" = "scratch", sourceId?: string) => {
+    const defaultSource = sourceId || selectedTimetableId;
+    const sourceTt = masterTimetables.find((t) => t.id === defaultSource) || masterTimetables[0];
+
+    if (method === "clone") {
+      setCreateTimetableForm({
+        name: `${sourceTt.name} (Copy)`,
+        setupMethod: "clone",
+        sourceTimetableId: sourceTt.id,
+        cloneBellSchedules: true,
+        cloneAllocations: true,
+        selectiveWings: false,
+        selectedWing: "all",
+      });
+    } else {
+      setCreateTimetableForm({
+        name: "Summer Academic Timetable 2026-27",
+        setupMethod: "scratch",
+        sourceTimetableId: defaultSource,
+        cloneBellSchedules: true,
+        cloneAllocations: true,
+        selectiveWings: false,
+        selectedWing: "all",
+      });
+    }
+    setIsCreateTimetableModalOpen(true);
+  };
+
+  const handleCreateTimetable = () => {
+    if (!createTimetableForm.name.trim()) return;
+
+    const newId = `tt-${Date.now()}`;
+    const newMasterTimetable: MasterTimetable = {
+      id: newId,
+      name: createTimetableForm.name.trim(),
+      academicYear: "2026-2027",
+      version: "v1.0 Draft",
+      status: "Draft",
+      description: "Timetable schedule",
+    };
+
+    let newBellSchedules: Record<string, BellSchedule>;
+    let newDayScheduleMap: Record<string, string>;
+    let newClassSchedules: Record<string, Record<string, { subject: string; teacher: string }[]>>;
+
+    if (createTimetableForm.setupMethod === "clone") {
+      const sourceData =
+        createTimetableForm.sourceTimetableId === selectedTimetableId
+          ? { bellSchedules, dayScheduleMap, classSchedules }
+          : timetablesStore[createTimetableForm.sourceTimetableId] || {
+              bellSchedules: INITIAL_BELL_SCHEDULES,
+              dayScheduleMap: INITIAL_DAY_SCHEDULE_MAP,
+              classSchedules: CLASS_SCHEDULES,
+            };
+
+      // Bell timings clone
+      if (createTimetableForm.cloneBellSchedules) {
+        newBellSchedules = JSON.parse(JSON.stringify(sourceData.bellSchedules));
+        newDayScheduleMap = JSON.parse(JSON.stringify(sourceData.dayScheduleMap));
+      } else {
+        newBellSchedules = JSON.parse(JSON.stringify(INITIAL_BELL_SCHEDULES));
+        newDayScheduleMap = JSON.parse(JSON.stringify(INITIAL_DAY_SCHEDULE_MAP));
+      }
+
+      // Class allocations clone
+      if (createTimetableForm.cloneAllocations) {
+        if (createTimetableForm.selectiveWings && createTimetableForm.selectedWing !== "all") {
+          newClassSchedules = {};
+          MOCK_CLASSES_LIST.forEach((cls) => {
+            if (cls.wing === createTimetableForm.selectedWing) {
+              newClassSchedules[cls.id] = JSON.parse(
+                JSON.stringify(sourceData.classSchedules[cls.id] || createEmptyClassWeek())
+              );
+            } else {
+              newClassSchedules[cls.id] = createEmptyClassWeek();
+            }
+          });
+        } else {
+          newClassSchedules = JSON.parse(JSON.stringify(sourceData.classSchedules));
+        }
+      } else {
+        newClassSchedules = createEmptySchoolSchedules();
+      }
+    } else {
+      // Start from scratch: default standard bell, all slots blank
+      newBellSchedules = JSON.parse(JSON.stringify(INITIAL_BELL_SCHEDULES));
+      newDayScheduleMap = JSON.parse(JSON.stringify(INITIAL_DAY_SCHEDULE_MAP));
+      newClassSchedules = createEmptySchoolSchedules();
+    }
+
+    // Save current active timetable and new timetable into store
+    setTimetablesStore((prev) => ({
+      ...prev,
+      [selectedTimetableId]: {
+        bellSchedules,
+        dayScheduleMap,
+        classSchedules,
+      },
+      [newId]: {
+        bellSchedules: newBellSchedules,
+        dayScheduleMap: newDayScheduleMap,
+        classSchedules: newClassSchedules,
+      },
+    }));
+
+    // Update master timetables list
+    setMasterTimetables((prev) => [...prev, newMasterTimetable]);
+
+    // Switch active view to newly created timetable
+    setBellSchedules(newBellSchedules);
+    setDayScheduleMap(newDayScheduleMap);
+    setClassSchedules(newClassSchedules);
+    setSavedBellSchedules(newBellSchedules);
+    setSavedDayScheduleMap(newDayScheduleMap);
+    setSavedClassSchedules(newClassSchedules);
+    setSelectedTimetableId(newId);
+
+    setIsCreateTimetableModalOpen(false);
+    setSaveSuccessToast(`🎉 Created & opened "${newMasterTimetable.name}"`);
+    setTimeout(() => {
+      setSaveSuccessToast(null);
+    }, 4000);
+  };
+
   // Computes whether live schedules, bell timing, or day layouts differ from the pre-edit snapshot
   const hasUnsavedChanges = useMemo(() => {
     const schedDiff = JSON.stringify(classSchedules) !== JSON.stringify(savedClassSchedules);
@@ -1058,7 +1284,7 @@ export default function Timetable2Page({
   const [selectedCell, setSelectedCell] = useState<{ day: string; periodId: string } | null>(null);
 
   const selectedMasterTimetable =
-    MASTER_TIMETABLES.find((tt) => tt.id === selectedTimetableId) || MASTER_TIMETABLES[0];
+    masterTimetables.find((tt) => tt.id === selectedTimetableId) || masterTimetables[0];
 
   // Set of wing names each teacher teaches in based on live classSchedules
   // (A teacher is mapped to a wing if they have at least one period assigned in any class of that wing)
@@ -1746,16 +1972,16 @@ export default function Timetable2Page({
     return (
       <div
         className={`grid items-stretch border-b-2 sticky top-0 z-20 ${isCustomOrSat
-            ? "border-amber-400 dark:border-amber-700 bg-amber-100 dark:bg-amber-950"
-            : "border-slate-400/90 dark:border-slate-600 bg-slate-100 dark:bg-slate-800"
+          ? "border-amber-400 dark:border-amber-700 bg-amber-100 dark:bg-amber-950"
+          : "border-slate-400/90 dark:border-slate-600 bg-slate-100 dark:bg-slate-800"
           }`}
         style={{ gridTemplateColumns: template }}
       >
         {/* Left Corner Cell: Day Group Range + Class Code Stamp + Append Period */}
         <div
           className={`${zm.timingH} sticky left-0 z-30 border-r-2 select-none flex items-center justify-between px-1 gap-1 ${isCustomOrSat
-              ? "bg-amber-200 dark:bg-amber-900 border-amber-400 dark:border-amber-700 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)] text-amber-900 dark:text-amber-100"
-              : "bg-slate-200 dark:bg-slate-700 border-slate-400/90 dark:border-slate-600 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)] text-slate-800 dark:text-slate-100"
+            ? "bg-amber-200 dark:bg-amber-900 border-amber-400 dark:border-amber-700 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)] text-amber-900 dark:text-amber-100"
+            : "bg-slate-200 dark:bg-slate-700 border-slate-400/90 dark:border-slate-600 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)] text-slate-800 dark:text-slate-100"
             }`}
           title={`${visualMeta ? `${visualMeta.gradeName} - ${visualMeta.rawSec} | ` : ""}${schedule.name} applies to: ${groupDays.join(", ")}`}
         >
@@ -1802,10 +2028,10 @@ export default function Timetable2Page({
             <div
               key={`timing-${keyPrefix}-${period.id}`}
               className={`${zm.timingH} relative flex items-center justify-center select-none group/col ${idx < schedule.periods.length - 1
-                  ? isCustomOrSat
-                    ? "border-r border-amber-300 dark:border-amber-800"
-                    : "border-r border-slate-400/80 dark:border-slate-600"
-                  : ""
+                ? isCustomOrSat
+                  ? "border-r border-amber-300 dark:border-amber-800"
+                  : "border-r border-slate-400/80 dark:border-slate-600"
+                : ""
                 }`}
             >
               {/* Boundary 0: Morning In-Time */}
@@ -1834,11 +2060,10 @@ export default function Timetable2Page({
                       ? `School Start In-Time: ${period.startTime} (Click to edit)`
                       : `School Start In-Time: ${period.startTime} (Locked in view mode)`
                   }
-                  className={`absolute left-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${
-                    isEditMode
+                  className={`absolute left-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${isEditMode
                       ? "hover:border-emerald-500 hover:text-emerald-600 cursor-pointer"
                       : "cursor-default"
-                  } transition-colors ${zm.badgeFont}`}
+                    } transition-colors ${zm.badgeFont}`}
                 >
                   {formatCalendarLineTime(period.startTime)}
                 </button>
@@ -1847,35 +2072,33 @@ export default function Timetable2Page({
               {/* Center Period Label with Smart Sequence (P1, P2, Lunch Break, P3...) */}
               <div
                 title={`${isBreak ? "Break / Recess" : `Period ${period.label}`}: ${period.startTime} – ${period.endTime} (${durStr})`}
-                className={`flex items-center justify-center gap-1 leading-none select-none px-1 ${
-                  idx === 0 ? "pl-8 sm:pl-9" : ""
-                } ${
-                  idx === schedule.periods.length - 1 ? "pr-8 sm:pr-9" : ""
-                }`}
+                className={`flex items-center justify-center gap-1 leading-none select-none px-1 ${idx === 0 ? "pl-8 sm:pl-9" : ""
+                  } ${idx === schedule.periods.length - 1 ? "pr-8 sm:pr-9" : ""
+                  }`}
               >
                 {isBreak && <Coffee className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
                 <span
                   className={`${zm.pLabelFont} font-bold tracking-tight font-sans ${isBreak
-                      ? "text-amber-700 dark:text-amber-300 uppercase text-[9px] font-extrabold"
-                      : isCustomOrSat
-                        ? "text-amber-800 dark:text-amber-300"
-                        : "text-slate-700 dark:text-slate-200"
+                    ? "text-amber-700 dark:text-amber-300 uppercase text-[9px] font-extrabold"
+                    : isCustomOrSat
+                      ? "text-amber-800 dark:text-amber-300"
+                      : "text-slate-700 dark:text-slate-200"
                     }`}
                 >
                   {period.label}
                 </span>
                 <span
                   className={`text-[8px] ${isCustomOrSat
-                      ? "text-amber-400 dark:text-amber-500"
-                      : "text-slate-300 dark:text-slate-600"
+                    ? "text-amber-400 dark:text-amber-500"
+                    : "text-slate-300 dark:text-slate-600"
                     }`}
                 >
                   ·
                 </span>
                 <span
                   className={`${zm.durFont} font-mono tabular-nums font-medium ${isCustomOrSat
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-slate-400 dark:text-slate-400"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-slate-400 dark:text-slate-400"
                     }`}
                 >
                   {durStr}
@@ -1923,11 +2146,10 @@ export default function Timetable2Page({
                       ? `School Dismissal Out-Time: ${period.endTime} (Click to edit)`
                       : `School Dismissal Out-Time: ${period.endTime} (Locked in view mode)`
                   }
-                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${
-                    isEditMode
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${isEditMode
                       ? "hover:border-emerald-500 hover:text-emerald-600 cursor-pointer"
                       : "cursor-default"
-                  } transition-colors ${zm.badgeFont}`}
+                    } transition-colors ${zm.badgeFont}`}
                 >
                   {formatCalendarLineTime(period.endTime)}
                 </button>
@@ -1959,11 +2181,10 @@ export default function Timetable2Page({
                         ? `Boundary: ${period.endTime} (Click to adjust boundary)`
                         : `Boundary: ${period.endTime} (Locked in view mode)`
                     }
-                    className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${
-                      isEditMode
+                    className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 font-mono whitespace-nowrap rounded shadow-2xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-400 dark:border-slate-600 font-bold ${isEditMode
                         ? "hover:border-emerald-500 hover:text-emerald-600 cursor-pointer"
                         : "cursor-default"
-                    } transition-colors ${zm.badgeFont}`}
+                      } transition-colors ${zm.badgeFont}`}
                   >
                     {formatCalendarLineTime(period.endTime)}
                   </button>
@@ -2129,10 +2350,10 @@ export default function Timetable2Page({
                         {/* Sticky Left Day Cell with Bell Timing Customize Button */}
                         <div
                           className={`sticky left-0 z-20 px-1 py-0.5 text-center font-bold ${dayFont} border-r-2 flex items-center justify-between select-none uppercase tracking-wider font-mono ${isSat
-                              ? "bg-amber-200 dark:bg-amber-950 border-slate-400/90 dark:border-slate-600 text-amber-800 dark:text-amber-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
-                              : isCustomDay
-                                ? "bg-emerald-100 dark:bg-emerald-950/80 border-slate-400/90 dark:border-slate-600 text-emerald-800 dark:text-emerald-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
-                                : "bg-slate-200 dark:bg-slate-800 border-slate-400/90 dark:border-slate-600 text-slate-800 dark:text-slate-100 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
+                            ? "bg-amber-200 dark:bg-amber-950 border-slate-400/90 dark:border-slate-600 text-amber-800 dark:text-amber-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
+                            : isCustomDay
+                              ? "bg-emerald-100 dark:bg-emerald-950/80 border-slate-400/90 dark:border-slate-600 text-emerald-800 dark:text-emerald-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
+                              : "bg-slate-200 dark:bg-slate-800 border-slate-400/90 dark:border-slate-600 text-slate-800 dark:text-slate-100 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
                             }`}
                         >
                           <span className="truncate pl-0.5">{day}</span>
@@ -2194,10 +2415,8 @@ export default function Timetable2Page({
                                   currentTeacher: assignment.teacher,
                                 });
                               }}
-                              className={`${rowH} px-1.5 flex items-center justify-center transition-all duration-150 select-none group relative ${
-                                isEditMode ? "cursor-pointer" : "cursor-default"
-                              } ${
-                                isSelected
+                              className={`${rowH} px-1.5 flex items-center justify-center transition-all duration-150 select-none group relative ${isEditMode ? "cursor-pointer" : "cursor-default"
+                                } ${isSelected
                                   ? "bg-emerald-50 dark:bg-emerald-950/60 ring-2 ring-emerald-500 ring-inset z-10"
                                   : isUnassigned
                                     ? isEditMode
@@ -2210,11 +2429,10 @@ export default function Timetable2Page({
                                       : isEditMode
                                         ? "bg-white dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
                                         : "bg-white dark:bg-slate-900"
-                              } ${
-                                slotIdx < group.schedule.periods.length - 1
+                                } ${slotIdx < group.schedule.periods.length - 1
                                   ? "border-r border-slate-400/80 dark:border-slate-600"
                                   : ""
-                              }`}
+                                }`}
                             >
                               {isUnassigned ? (
                                 isEditMode ? (
@@ -2228,9 +2446,8 @@ export default function Timetable2Page({
                                 )
                               ) : (
                                 <div
-                                  className={`${subjectFont} truncate whitespace-nowrap text-center leading-tight transition-colors text-slate-800 dark:text-slate-100 ${
-                                    isEditMode ? "group-hover:text-indigo-600 dark:group-hover:text-indigo-400" : ""
-                                  }`}
+                                  className={`${subjectFont} truncate whitespace-nowrap text-center leading-tight transition-colors text-slate-800 dark:text-slate-100 ${isEditMode ? "group-hover:text-indigo-600 dark:group-hover:text-indigo-400" : ""
+                                    }`}
                                   title={`${assignment.subject} - ${assignment.teacher} (${period.startTime} - ${period.endTime})${!isEditMode ? " · [View Only - Enable Edit to modify]" : ""}`}
                                 >
                                   <span>{shortSubject}</span>
@@ -2354,13 +2571,12 @@ export default function Timetable2Page({
                       >
                         {/* Sticky Left Day Cell */}
                         <div
-                          className={`sticky left-0 z-20 px-1 py-0.5 text-center font-bold ${dayFont} border-r-2 flex items-center justify-center select-none uppercase tracking-wider font-mono ${
-                            isSat
+                          className={`sticky left-0 z-20 px-1 py-0.5 text-center font-bold ${dayFont} border-r-2 flex items-center justify-center select-none uppercase tracking-wider font-mono ${isSat
                               ? "bg-amber-200 dark:bg-amber-950 border-slate-400/90 dark:border-slate-600 text-amber-800 dark:text-amber-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
                               : isCustomDay
                                 ? "bg-emerald-100 dark:bg-emerald-950/80 border-slate-400/90 dark:border-slate-600 text-emerald-800 dark:text-emerald-300 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
                                 : "bg-slate-200 dark:bg-slate-800 border-slate-400/90 dark:border-slate-600 text-slate-800 dark:text-slate-100 shadow-[2px_0_5px_-1px_rgba(0,0,0,0.15)]"
-                          }`}
+                            }`}
                         >
                           <span className="truncate">{day}</span>
                         </div>
@@ -2508,19 +2724,19 @@ export default function Timetable2Page({
     const filterQuery = searchQuery.trim().toLowerCase();
     const visibleFreeTeachers = filterQuery
       ? freeTeachers.filter(
-          (item) =>
-            item.teacher.name.toLowerCase().includes(filterQuery) ||
-            item.teacher.primarySubject.toLowerCase().includes(filterQuery) ||
-            item.teacher.department.toLowerCase().includes(filterQuery)
-        )
+        (item) =>
+          item.teacher.name.toLowerCase().includes(filterQuery) ||
+          item.teacher.primarySubject.toLowerCase().includes(filterQuery) ||
+          item.teacher.department.toLowerCase().includes(filterQuery)
+      )
       : freeTeachers;
     const visibleBusyTeachers = filterQuery
       ? busyTeachers.filter(
-          (item) =>
-            item.teacher.name.toLowerCase().includes(filterQuery) ||
-            item.subject.toLowerCase().includes(filterQuery) ||
-            item.classCode.toLowerCase().includes(filterQuery)
-        )
+        (item) =>
+          item.teacher.name.toLowerCase().includes(filterQuery) ||
+          item.subject.toLowerCase().includes(filterQuery) ||
+          item.classCode.toLowerCase().includes(filterQuery)
+      )
       : busyTeachers;
 
     return (
@@ -2547,11 +2763,10 @@ export default function Timetable2Page({
                 key={`free-day-${day}`}
                 type="button"
                 onClick={() => setFreeTeacherDay(day)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  freeTeacherDay === day
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${freeTeacherDay === day
                     ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/40"
                     : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
-                }`}
+                  }`}
               >
                 {day}
               </button>
@@ -2579,11 +2794,10 @@ export default function Timetable2Page({
                   key={`free-p-${p.id}`}
                   type="button"
                   onClick={() => setFreeTeacherSlot(pIdx)}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    isSelected
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${isSelected
                       ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-400/40"
                       : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
-                  }`}
+                    }`}
                 >
                   <span>P{pIdx < 4 ? pIdx + 1 : pIdx}</span>
                   <span className="text-[10px] opacity-75 font-mono hidden sm:inline">({p.startTime})</span>
@@ -2762,13 +2976,12 @@ export default function Timetable2Page({
                   setIsTimetableDropdownOpen(false);
                   setIsWingDropdownOpen(false);
                 }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all cursor-pointer shadow-2xs min-w-[160px] sm:min-w-[190px] justify-between ${
-                  perspective === "classwise"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all cursor-pointer shadow-2xs min-w-[160px] sm:min-w-[190px] justify-between ${perspective === "classwise"
                     ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
                     : perspective === "teacherwise"
                       ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
                       : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                }`}
+                  }`}
                 title="Switch Timetable Perspective"
               >
                 <div className="flex items-center gap-2 truncate">
@@ -2784,9 +2997,8 @@ export default function Timetable2Page({
                   </span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                    isPerspectiveDropdownOpen ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isPerspectiveDropdownOpen ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -2808,11 +3020,10 @@ export default function Timetable2Page({
                         setPerspective("classwise");
                         setIsPerspectiveDropdownOpen(false);
                       }}
-                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
-                        perspective === "classwise"
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${perspective === "classwise"
                           ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
                           : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                      }`}
+                        }`}
                     >
                       <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0 mt-0.5">
                         <GraduationCap className="w-4 h-4" />
@@ -2847,11 +3058,10 @@ export default function Timetable2Page({
                         setPerspective("teacherwise");
                         setIsPerspectiveDropdownOpen(false);
                       }}
-                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
-                        perspective === "teacherwise"
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${perspective === "teacherwise"
                           ? "bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 font-bold"
                           : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                      }`}
+                        }`}
                     >
                       <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0 mt-0.5">
                         <User className="w-4 h-4" />
@@ -2886,11 +3096,10 @@ export default function Timetable2Page({
                         setPerspective("free-teachers");
                         setIsPerspectiveDropdownOpen(false);
                       }}
-                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
-                        perspective === "free-teachers"
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${perspective === "free-teachers"
                           ? "bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 font-bold"
                           : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                      }`}
+                        }`}
                     >
                       <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5">
                         <UserCheck className="w-4 h-4" />
@@ -2925,19 +3134,18 @@ export default function Timetable2Page({
                 title="Select Timetable"
               >
                 <div className="flex items-center gap-2 truncate">
-                  <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-500" />
-                  <span className="truncate">{selectedMasterTimetable.name}</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                    {selectedMasterTimetable.version}
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                      isTimetableDropdownOpen ? "rotate-180" : ""
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      selectedMasterTimetable.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
                     }`}
                   />
+                  <span className="truncate">{selectedMasterTimetable.name}</span>
                 </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ${
+                    isTimetableDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
 
               {/* Timetable Dropdown Menu */}
@@ -2947,54 +3155,61 @@ export default function Timetable2Page({
                     className="fixed inset-0 z-40"
                     onClick={() => setIsTimetableDropdownOpen(false)}
                   />
-                  <div className="absolute left-0 mt-2 w-full min-w-[280px] sm:min-w-[320px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-50 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="absolute left-0 mt-2 w-full min-w-[260px] sm:min-w-[300px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-50 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100">
                     <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                      <span>Select Timetable</span>
-                      <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                        {selectedMasterTimetable.academicYear}
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Select Timetable</span>
                       </span>
                     </div>
 
-                    {MASTER_TIMETABLES.map((tt) => {
-                      const isSelected = tt.id === selectedMasterTimetable.id;
-                      return (
-                        <button
-                          key={tt.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedTimetableId(tt.id);
-                            setIsTimetableDropdownOpen(false);
-                          }}
-                          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
-                            isSelected
-                              ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
-                              : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${
-                                tt.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
-                              }`}
-                            />
-                            <div className="truncate">
-                              <div className="truncate font-semibold">{tt.name}</div>
-                              <div className="text-[10px] text-slate-400 font-normal truncate">
-                                {tt.description}
-                              </div>
+                    <div className="max-h-60 overflow-y-auto space-y-1 py-1">
+                      {masterTimetables.map((tt) => {
+                        const isSelected = tt.id === selectedMasterTimetable.id;
+                        return (
+                          <button
+                            key={tt.id}
+                            type="button"
+                            onClick={() => {
+                              switchTimetable(tt.id);
+                              setIsTimetableDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${
+                                  tt.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
+                                }`}
+                              />
+                              <span className="truncate font-semibold">{tt.name}</span>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-500">
-                              {tt.version}
-                            </span>
                             {isSelected && (
-                              <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                              <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0 ml-2" />
                             )}
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Sticky Footer Button inside dropdown: + Create New Timetable... */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 sticky bottom-0 bg-white dark:bg-slate-900">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTimetableDropdownOpen(false);
+                          openCreateTimetableModal("scratch");
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 font-bold text-xs transition-colors cursor-pointer border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Create New Timetable...</span>
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -3022,9 +3237,8 @@ export default function Timetable2Page({
                       {selectedWingOption.count}
                     </span>
                     <ChevronDown
-                      className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                        isWingDropdownOpen ? "rotate-180" : ""
-                      }`}
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isWingDropdownOpen ? "rotate-180" : ""
+                        }`}
                     />
                   </div>
                 </button>
@@ -3050,11 +3264,10 @@ export default function Timetable2Page({
                               setSelectedWing(w.id);
                               setIsWingDropdownOpen(false);
                             }}
-                            className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-colors cursor-pointer ${
-                              isSelected
+                            className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-colors cursor-pointer ${isSelected
                                 ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold"
                                 : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                            }`}
+                              }`}
                           >
                             <div className="truncate">
                               <div>{w.label}</div>
@@ -3139,11 +3352,10 @@ export default function Timetable2Page({
                         setTimeout(() => setSaveSuccessToast(null), 3500);
                       }}
                       disabled={!hasUnsavedChanges}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs ${
-                        hasUnsavedChanges
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs ${hasUnsavedChanges
                           ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md ring-2 ring-emerald-400/50 cursor-pointer active:scale-95"
                           : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300/40 dark:border-slate-700/40"
-                      }`}
+                        }`}
                       title={
                         hasUnsavedChanges
                           ? "Save changes to class schedules"
@@ -3191,11 +3403,10 @@ export default function Timetable2Page({
                 onClick={handleZoomOut}
                 disabled={zoom <= MIN_ZOOM}
                 title={zoom <= MIN_ZOOM ? `Minimum zoom reached (${MIN_ZOOM}%)` : "Zoom out"}
-                className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
-                  zoom <= MIN_ZOOM
+                className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${zoom <= MIN_ZOOM
                     ? "opacity-30 cursor-not-allowed text-slate-400"
                     : "text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 active:scale-95 shadow-2xs cursor-pointer"
-                }`}
+                  }`}
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
@@ -3212,11 +3423,10 @@ export default function Timetable2Page({
                 onClick={handleZoomIn}
                 disabled={zoom >= MAX_ZOOM}
                 title={zoom >= MAX_ZOOM ? `Maximum zoom reached (${MAX_ZOOM}%)` : "Zoom in"}
-                className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
-                  zoom >= MAX_ZOOM
+                className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${zoom >= MAX_ZOOM
                     ? "opacity-30 cursor-not-allowed text-slate-400"
                     : "text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 active:scale-95 shadow-2xs cursor-pointer"
-                }`}
+                  }`}
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -3388,6 +3598,276 @@ export default function Timetable2Page({
           );
         })()}
       </main>
+
+      {/* ── MODAL: CREATE NEW TIMETABLE & FULL DUPLICATION ── */}
+      {isCreateTimetableModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center shadow-xs">
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Create New Timetable
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateTimetableModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Timetable Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Timetable Name:
+                </label>
+                <input
+                  type="text"
+                  value={createTimetableForm.name}
+                  onChange={(e) =>
+                    setCreateTimetableForm((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="e.g. Summer Academic Timetable 2026-27"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Setup Method Section */}
+              <div className="pt-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                  <span>Setup Method</span>
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Start from Scratch */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCreateTimetableForm((prev) => ({ ...prev, setupMethod: "scratch" }))
+                    }
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      createTimetableForm.setupMethod === "scratch"
+                        ? "border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-xs"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            createTimetableForm.setupMethod === "scratch"
+                              ? "border-indigo-600 bg-indigo-600 text-white"
+                              : "border-slate-300 dark:border-slate-700"
+                          }`}
+                        >
+                          {createTimetableForm.setupMethod === "scratch" && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="font-bold text-xs text-slate-900 dark:text-white">
+                        📄 Start from Scratch
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Default standard bell
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800/60 font-medium">
+                      All period slots blank
+                    </div>
+                  </button>
+
+                  {/* Clone Existing Timetable (★) */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCreateTimetableForm((prev) => ({ ...prev, setupMethod: "clone" }))
+                    }
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between relative ${
+                      createTimetableForm.setupMethod === "clone"
+                        ? "border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-xs"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30"
+                    }`}
+                  >
+                    <div className="absolute top-2.5 right-2.5">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300/40">
+                        ★ Recommended
+                      </span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                          <Copy className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1">
+                        <span>📑 Clone Existing Timetable</span>
+                        <span className="text-amber-500 font-bold">(★)</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Duplicate all timings & classes
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800/60 font-medium">
+                      from an existing timetable
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* [When "Clone Existing Timetable" is selected] */}
+              {createTimetableForm.setupMethod === "clone" && (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3.5 animate-in fade-in duration-150">
+                  {/* Source Timetable */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Source Timetable:
+                    </label>
+                    <select
+                      value={createTimetableForm.sourceTimetableId}
+                      onChange={(e) =>
+                        setCreateTimetableForm((prev) => ({
+                          ...prev,
+                          sourceTimetableId: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      {masterTimetables.map((tt) => (
+                        <option key={tt.id} value={tt.id}>
+                          {tt.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Clone Options */}
+                  <div className="space-y-2 pt-1">
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Clone Options:
+                    </div>
+
+                    {/* Option 1: Bell Timings */}
+                    <label className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white dark:hover:bg-slate-850 cursor-pointer transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60">
+                      <input
+                        type="checkbox"
+                        checked={createTimetableForm.cloneBellSchedules}
+                        onChange={(e) =>
+                          setCreateTimetableForm((prev) => ({
+                            ...prev,
+                            cloneBellSchedules: e.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                      />
+                      <div className="text-xs">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          Bell Timings & Schedules (Standard Mon-Fri + Saturday Half-day)
+                        </div>
+                      </div>
+                    </label>
+
+                    {/* Option 2: Assigned Classes & Teacher Allocations */}
+                    <label className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white dark:hover:bg-slate-850 cursor-pointer transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60">
+                      <input
+                        type="checkbox"
+                        checked={createTimetableForm.cloneAllocations}
+                        onChange={(e) =>
+                          setCreateTimetableForm((prev) => ({
+                            ...prev,
+                            cloneAllocations: e.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                      />
+                      <div className="text-xs">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          Assigned Classes & Teacher Allocations (36 classes, 1,440 slots)
+                        </div>
+                      </div>
+                    </label>
+
+                    {/* Option 3: Selective Wings */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-xl hover:bg-white dark:hover:bg-slate-850 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60">
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createTimetableForm.selectiveWings}
+                          onChange={(e) =>
+                            setCreateTimetableForm((prev) => ({
+                              ...prev,
+                              selectiveWings: e.target.checked,
+                            }))
+                          }
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          Selective Wings:
+                        </span>
+                      </label>
+                      <select
+                        disabled={!createTimetableForm.selectiveWings}
+                        value={createTimetableForm.selectedWing}
+                        onChange={(e) =>
+                          setCreateTimetableForm((prev) => ({
+                            ...prev,
+                            selectedWing: e.target.value,
+                          }))
+                        }
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${
+                          createTimetableForm.selectiveWings
+                            ? "bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs"
+                            : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {WING_OPTIONS.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.label} ({w.count} Classes)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/80">
+              <button
+                type="button"
+                onClick={() => setIsCreateTimetableModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!createTimetableForm.name.trim()}
+                onClick={handleCreateTimetable}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create & Open Timetable</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL: DETAILED CLASS SECTION STATUS BREAKDOWN ── */}
       {isStatusModalOpen && (
@@ -3686,8 +4166,8 @@ export default function Timetable2Page({
                     }
                   }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${boundaryInfo?.isValid
-                      ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20"
-                      : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
+                    ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-60"
                     }`}
                 >
                   Apply Boundary
@@ -3742,8 +4222,8 @@ export default function Timetable2Page({
                     )
                   }
                   className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${insertPeriodState.type === "regular"
-                      ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30"
-                      : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300"
+                    ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30"
+                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300"
                     }`}
                 >
                   <div className="flex items-center gap-2 font-bold text-xs">
@@ -3770,8 +4250,8 @@ export default function Timetable2Page({
                     )
                   }
                   className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${insertPeriodState.type === "break"
-                      ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/30"
-                      : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300"
+                    ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/30"
+                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300"
                     }`}
                 >
                   <div className="flex items-center gap-2 font-bold text-xs">
@@ -3840,8 +4320,8 @@ export default function Timetable2Page({
                       setInsertPeriodState((prev) => (prev ? { ...prev, duration: d } : null))
                     }
                     className={`py-2 rounded-xl text-xs font-bold font-mono transition-all border cursor-pointer ${insertPeriodState.duration === d
-                        ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
-                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400"
+                      ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                      : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400"
                       }`}
                   >
                     {d}m
@@ -4002,8 +4482,8 @@ export default function Timetable2Page({
                           )
                         }
                         className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 group ${isSelected
-                            ? "border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 ring-2 ring-indigo-500/30"
-                            : "border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 bg-white dark:bg-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
+                          ? "border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 ring-2 ring-indigo-500/30"
+                          : "border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 bg-white dark:bg-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
                           }`}
                       >
                         <div className="flex items-center justify-between">
